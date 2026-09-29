@@ -13,7 +13,7 @@ import com.wtlx.utils.UserHolder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -76,7 +76,7 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         //1.获取当前用户的id
         Long userId = UserHolder.getUser().getId();
         //2.根据当前用户的id和需要查看是否关注的id来在表中进行查询
-        Integer count = lambdaQuery()
+        Long count = lambdaQuery()
                 .eq(Follow::getUserId, userId)
                 .eq(Follow::getFollowUserId, followId)
                 .count();

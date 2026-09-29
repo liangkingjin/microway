@@ -4,7 +4,7 @@ import com.wtlx.service.IThumbsUpRecordService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 @Component
 public class ThumbsUpConsumer {

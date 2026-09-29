@@ -31,7 +31,8 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/user/login",
                         "//provinces/**",
                         "/guides/**",
-                        "/scenic-spots/**"
+                        "/scenic-spots/**",
+                        "/ai/**"
                 ).excludePathPatterns("/doc.html").excludePathPatterns("/webjars/**").order(1);
         //token刷新的拦截器
         registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).addPathPatterns("/**").order(0);

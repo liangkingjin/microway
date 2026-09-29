@@ -7,7 +7,7 @@ import com.wtlx.dto.UserDTO;
 import com.wtlx.dto.UserUpdateDTO;
 import com.wtlx.entity.User;
 
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpSession;
 
 
 public interface IUserService extends IService<User> {

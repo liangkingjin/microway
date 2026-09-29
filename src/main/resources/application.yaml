@@ -7,23 +7,52 @@ spring:
       max-request-size: 100MB  # 总请求体大小
   application:
     name: wtlx
+  # ==================== 业务主数据源（MySQL） ====================
   datasource:
-    driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/wtlx?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/wtlx?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&characterEncoding=utf8
     username: root
     password: 1234
-  redis:
-    host: 192.168.150.101
-    # host: 127.0.0.1
-    port: 6379
-    password: 123321
-    lettuce:
-      pool:
-        max-active: 10
-        max-idle: 10
-        min-idle: 0
-        time-between-eviction-runs: 10s
-    database: 0
+  # ==================== AI 能力（原 TripAgent 收口） ====================
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: deepseek-v4-flash-0731
+      embedding:
+        options:
+          # text-embedding-v3 向量维度为 1024，需与 pgvector.dimensions 保持一致
+          model: text-embedding-v3
+    mcp:
+      client:
+        stdio:
+          servers-configuration: classpath:mcp-servers.json
+    # PGVector 向量库配置（独立于业务 MySQL 数据源）
+    vectorstore:
+      pgvector:
+        # 自动创建 pgvector 扩展与向量表
+        initialize-schema: true
+        # 向量维度（text-embedding-v3 = 1024）
+        dimensions: 1024
+        # 索引类型与距离度量
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        schema-name: public
+        table-name: vector_store
+  data:
+    redis:
+      host: 192.168.150.101
+      # host: 127.0.0.1
+      port: 6379
+      password: 123321
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 10
+          min-idle: 0
+          time-between-eviction-runs: 10s
+      database: 0
   rabbitmq:
     host: 192.168.150.101
     port: 5672
@@ -40,8 +69,50 @@ spring:
           stateless: true
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
+
+# ==================== AI 数据源（PostgreSQL + pgvector，自定义前缀） ====================
+ai:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://192.168.150.101:5432/vector_db
+    username: postgres
+    password: 123456
+
 mybatis-plus:
   type-aliases-package: com.wtlx.entity
+
+# ==================== AI 对话记忆配置 ====================
+trip-agent:
+  memory:
+    summary:
+      enabled: true
+      # 保留最近的历史消息数量
+      history-keep-turns: 8
+      # 触发摘要压缩的用户消息数
+      summary-start-turns: 9
+      # 摘要最大长度
+      max-summary-length: 200
+  rag:
+    enabled: true
+
+# ==================== AI WebSearchTool 配置 ====================
+search-api:
+  api-key: tbD2BBpbA39UzDvzcnmTRAHL
+
+# ==================== 接口文档 ====================
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
 tj:
   xxl-job:
     access-token: tianji
