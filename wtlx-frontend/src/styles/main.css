@@ -1,0 +1,144 @@
+html {
+    font-size: 12px;
+    width: 100%;
+}
+body{
+    margin: 0;
+}
+html,body,#app{
+    height: 100%;
+}
+
+.el-tabs__item {
+    font-size: 14px;
+    font-weight: bold;
+}
+.el-tabs__active-bar {
+    height: 4px;
+    background-image: linear-gradient(to right, #F63, #f5b9a2);
+}
+/* 底部导航栏样式优化 */
+.foot {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  background-color: #ffffff;
+  box-shadow: 0 -1px 5px rgba(0, 0, 0, 0.05);
+  z-index: 999;
+  border-top: 1px solid #f0f0f0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.foot-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #82848a;
+  text-align: center;
+  position: relative;
+  padding: 5px 0;
+}
+
+.foot-box.active {
+  color: #4a89dc;
+}
+
+.foot-view {
+  font-size: 20px;
+  text-align: center;
+}
+
+.foot-view i {
+  font-size: 20px;
+}
+
+.foot-text {
+  font-size: 10px;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* 底部导航栏中间加号按钮样式优化 */
+.foot-center {
+  position: relative;
+}
+
+.add-btn-floating {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #39a5f8;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(57, 165, 248, 0.4);
+  z-index: 10;
+  color: white;
+  font-size: 24px;
+  transition: all 0.3s ease;
+}
+
+.add-btn-floating i {
+  font-size: 24px;
+}
+
+.add-btn-floating:active {
+  transform: translateX(-50%) scale(0.95);
+  box-shadow: 0 1px 4px rgba(57, 165, 248, 0.4);
+}
+.add-btn-wrapper {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  top: -30px;
+  background: #4a89dc;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(74, 137, 220, 0.3);
+}
+
+.add-btn {
+  width: 24px;
+  height: 24px;
+  filter: brightness(10);
+}
+
+/* 底部导航栏下方的占位空间 */
+.foot-placeholder {
+  height: 50px;
+}
+.foot-box{
+    width: 20%;
+    color: #82848a;
+    text-align: center;
+}
+.foot-view {
+    font-size: 26px;
+}
+.foot-text{
+    font-size: 8px;
+    margin-top: -4px;
+}
+.foot-text, .foot-view{
+    text-align: center;
+}
+.active{
+    color: #8ecae6;
+}
+
+/*element-ui的评价星星间隙*/
+.el-rate__icon {
+    margin-right: 0;
+}
+

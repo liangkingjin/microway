@@ -1,0 +1,958 @@
+<template>
+  <div class="detail-page">
+    <HeaderBar title="我的旅行计划" :show-back="true" />
+
+    <div class="detail-container" v-if="planDetail">
+      <div class="date-info">
+        <div class="date-range">{{ planDetail.startDate }} — {{ planDetail.endDate }} {{ planDetail.status }}</div>
+        <div class="duration-tag">{{ planDetail.duration }}</div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab-item" :class="{ active: activeTab === 'itinerary' }" @click="activeTab = 'itinerary'">行程</div>
+        <div class="tab-item" :class="{ active: activeTab === 'expenses' }" @click="activeTab = 'expenses'">旅行账单</div>
+        <div class="tab-item" :class="{ active: activeTab === 'luggage' }" @click="activeTab = 'luggage'">行李清单</div>
+      </div>
+
+      <template v-if="activeTab === 'itinerary'">
+        <div v-for="day in days" :key="day.date" class="day-section">
+          <div class="day-header" @click="day.isCollapsed = !day.isCollapsed">
+            <div class="day-title">
+              {{ day.date }} {{ day.weekDay }}
+              <el-icon class="arrow-icon" :class="{ collapsed: !day.isCollapsed }"><ArrowRight /></el-icon>
+            </div>
+          </div>
+
+          <div v-show="!day.isCollapsed" class="day-content">
+            <div
+              v-for="item in day.items"
+              :key="item.id"
+              class="itinerary-item"
+              @click="showItemActions(day.date, item)">
+              <div class="item-time">{{ formatTime(item.time) }}</div>
+              <div class="item-content">{{ item.content }}</div>
+            </div>
+
+            <div class="add-item" @click="addItinerary(day.date)">
+              <el-icon class="add-icon"><Plus /></el-icon>
+              <span>添加行程</span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="activeTab === 'expenses'">
+        <div class="total-amount">
+          <span class="total-label">总支出</span>
+          <span class="total-value">¥{{ totalExpenses }}</span>
+        </div>
+
+        <div class="bill-list">
+          <div v-for="bill in bills" :key="bill.id" class="list-item">
+            <div class="item-left">
+              <div class="item-icon">
+                <el-icon><component :is="bill.icon" /></el-icon>
+              </div>
+              <div class="item-info">
+                <div class="item-title">{{ bill.title }}</div>
+                <div class="item-date">{{ bill.date }}</div>
+              </div>
+            </div>
+            <div class="item-amount">¥{{ bill.amount }}</div>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="activeTab === 'luggage'">
+        <div class="luggage-list">
+          <div v-for="item in luggageList" :key="item.id" class="list-item">
+            <div class="item-left">
+              <div class="item-icon">
+                <el-icon><component :is="item.icon" /></el-icon>
+              </div>
+              <div class="item-info">
+                <div class="item-title">{{ item.name }}</div>
+                <div class="item-date">{{ item.quantity }}个</div>
+              </div>
+            </div>
+            <div class="item-amount">
+              <span class="luggage-status" :class="item.isPacked ? 'status-packed' : 'status-unpacked'">
+                {{ item.isPacked ? '已打包' : '未打包' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- 行程操作菜单 -->
+    <div class="action-menu" v-if="showActions">
+      <div class="action-item" @click="editItem">编辑</div>
+      <div class="action-item delete" @click="deleteItem">删除</div>
+      <div class="action-item cancel" @click="closeActions">取消</div>
+    </div>
+
+    <!-- 添加/编辑行程对话框 -->
+    <el-dialog
+      :title="isEditing ? '编辑行程' : '添加行程'"
+      v-model="dialogVisible"
+      width="90%">
+      <div class="itinerary-form">
+        <div class="form-item">
+          <div class="form-label">选择时间</div>
+          <el-time-select
+            v-model="currentItem.time"
+            start="06:00"
+            step="00:15"
+            end="23:45"
+            placeholder="请选择时间"
+            class="form-input">
+          </el-time-select>
+        </div>
+        <div class="form-item">
+          <div class="form-label">行程内容</div>
+          <el-input
+            v-model="currentItem.content"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入行程内容">
+          </el-input>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveItem">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 添加加号按钮（仅在账单和行李清单 tab 时显示） -->
+    <div class="add-button" v-if="activeTab !== 'itinerary'" @click="showAddDialog">
+      <el-icon><Plus /></el-icon>
+    </div>
+
+    <!-- 账单添加弹窗 -->
+    <div class="bill-dialog" v-if="showBillDialog">
+      <div class="bill-header">
+        <div class="bill-title">添加账单</div>
+        <div class="bill-close-btn" @click="showBillDialog = false">
+          <el-icon><Close /></el-icon>
+        </div>
+      </div>
+      <div class="bill-input">
+        <input type="text" v-model="billRemark" placeholder="点击填写备注..." class="remark-input">
+        <div class="bill-amount">¥ {{ amount || '0' }}</div>
+      </div>
+
+      <div class="number-pad">
+        <div
+          v-for="key in numberKeys"
+          :key="key"
+          class="number-key"
+          :class="{ 'complete-key': key === '完成' }"
+          @click="inputNumber(key)">
+          {{ key }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 行李清单弹窗 -->
+    <div class="luggage-dialog" v-if="showLuggageDialog">
+      <div class="luggage-dialog-header">
+        <div class="luggage-dialog-title">添加物品</div>
+        <div class="luggage-close-btn" @click="showLuggageDialog = false">
+          <el-icon><Close /></el-icon>
+        </div>
+      </div>
+      <input type="text"
+             v-model="luggageName"
+             placeholder="请输入物品名称"
+             class="luggage-input"
+             @keyup.enter="saveLuggage">
+      <button class="luggage-confirm-btn" @click="saveLuggage">确定</button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import HeaderBar from '../components/HeaderBar.vue'
+import request from '../api/request'
+import { getUrlParam } from '../utils/index.js'
+
+const activeTab = ref('itinerary')
+const planDetail = ref(null)
+const days = ref([])
+const showActions = ref(false)
+const dialogVisible = ref(false)
+const isEditing = ref(false)
+const currentItem = reactive({
+  id: null,
+  content: '',
+  date: null,
+  time: ''
+})
+const selectedDate = ref(null)
+const selectedItem = ref(null)
+const showBillDialog = ref(false)
+const amount = ref('')
+const billRemark = ref('')
+const numberKeys = ['1', '2', '3', '×', '4', '5', '6', '+', '7', '8', '9', '-', '.', '0', '=', '完成']
+const bills = ref([])
+const luggageList = ref([])
+const showLuggageDialog = ref(false)
+const luggageName = ref('')
+
+const expenseTypes = {
+  accommodation: { label: '住宿', icon: 'House' },
+  transportation: { label: '交通', icon: 'Van' },
+  dining: { label: '餐饮', icon: 'KnifeFork' },
+  shopping: { label: '购物', icon: 'ShoppingCart' },
+  entertainment: { label: '娱乐', icon: 'VideoCamera' },
+  scenic: { label: '景点', icon: 'Picture' },
+  other: { label: '其他', icon: 'Goods' }
+}
+
+const totalExpenses = computed(() => {
+  return bills.value.reduce((sum, bill) => sum + parseFloat(bill.amount), 0).toFixed(2)
+})
+
+onMounted(() => {
+  const planId = getUrlParam('id')
+  if (planId) {
+    loadPlanDetail(planId)
+  }
+  // 原 ?type= 参数仅用于区分账单/行李弹窗来源；SPA 中以当前 activeTab 为准
+})
+
+function loadPlanDetail(planId) {
+  request.get(`/travel-plans/${planId}`)
+    .then(res => {
+      planDetail.value = res.data
+      generateDays()
+      loadExpenses(planId)
+      loadLuggage(planId)
+      loadItineraryItems(planId)
+    })
+    .catch(error => {
+      console.error('加载计划详情失败:', error)
+      ElMessage.error('加载计划详情失败')
+    })
+}
+
+function loadExpenses(planId) {
+  request.get(`/expenses/${planId}`)
+    .then(res => {
+      const data = res.data
+      bills.value = (data || []).map(expense => ({
+        id: expense.id,
+        title: expense.title,
+        amount: expense.amount,
+        date: formatDate(new Date(expense.date)),
+        remark: expense.remark,
+        icon: (expenseTypes[expense.type] && expenseTypes[expense.type].icon) || 'Goods'
+      }))
+    })
+    .catch(error => {
+      console.error('加载账单失败:', error)
+      ElMessage.error('加载账单失败')
+    })
+}
+
+function loadLuggage(planId) {
+  request.get(`/luggage-items/${planId}`)
+    .then(res => {
+      const data = res.data
+      luggageList.value = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        isPacked: item.isPacked,
+        icon: 'Goods'
+      }))
+    })
+    .catch(error => {
+      console.error('加载行李清单失败:', error)
+      ElMessage.error('加载行李清单失败')
+    })
+}
+
+function loadItineraryItems(planId) {
+  days.value.forEach(day => {
+    day.items = []
+  })
+
+  request.get(`/itinerary-items/${planId}`)
+    .then(res => {
+      const data = res.data || []
+      data.forEach(item => {
+        const day = days.value.find(d => d.date === formatDate(new Date(item.date)))
+        if (day) {
+          day.items.push({
+            id: item.id,
+            content: item.content,
+            date: formatDate(new Date(item.date)),
+            time: item.time
+          })
+        }
+      })
+
+      days.value.forEach(day => {
+        day.items.sort((a, b) => {
+          return a.time.localeCompare(b.time)
+        })
+      })
+    })
+    .catch(error => {
+      console.error('加载行程失败:', error)
+      ElMessage.error('加载行程失败')
+    })
+}
+
+function generateDays() {
+  if (!planDetail.value) return
+
+  const startDate = new Date(planDetail.value.startDate.replace(/\./g, '-'))
+  const endDate = new Date(planDetail.value.endDate.replace(/\./g, '-'))
+  const result = []
+
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    result.push({
+      date: formatDate(d),
+      weekDay: getWeekDay(d),
+      isCollapsed: false,
+      items: []
+    })
+  }
+  days.value = result
+}
+
+function formatDate(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${month}.${day}`
+}
+
+function getWeekDay(date) {
+  const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return weekDays[date.getDay()]
+}
+
+function addItinerary(date) {
+  isEditing.value = false
+  currentItem.id = null
+  currentItem.content = ''
+  currentItem.date = date
+  const now = new Date()
+  currentItem.time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+  dialogVisible.value = true
+}
+
+function showItemActions(date, item) {
+  selectedDate.value = date
+  selectedItem.value = item
+  showActions.value = true
+}
+
+function editItem() {
+  isEditing.value = true
+  currentItem.id = selectedItem.value.id
+  currentItem.content = selectedItem.value.content
+  currentItem.date = selectedItem.value.date
+  currentItem.time = selectedItem.value.time
+  dialogVisible.value = true
+  showActions.value = false
+}
+
+function deleteItem() {
+  request.delete(`/itinerary-items/${selectedItem.value.id}`)
+    .then(() => {
+      const day = days.value.find(d => d.date === selectedDate.value)
+      if (day) {
+        const index = day.items.findIndex(item => item.id === selectedItem.value.id)
+        if (index > -1) {
+          day.items.splice(index, 1)
+        }
+      }
+      ElMessage.success('删除成功')
+    })
+    .catch(error => {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    })
+  showActions.value = false
+}
+
+function saveItem() {
+  if (!currentItem.time) {
+    ElMessage.warning('请选择时间')
+    return
+  }
+
+  if (!currentItem.content.trim()) {
+    ElMessage.warning('请输入行程内容')
+    return
+  }
+
+  const dateParts = currentItem.date.split('.')
+  const today = new Date()
+  const formattedDate = `${today.getFullYear()}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`
+
+  const itemData = {
+    planId: planDetail.value.id,
+    date: formattedDate,
+    time: typeof currentItem.time === 'string' ? currentItem.time : currentItem.time,
+    content: currentItem.content.trim(),
+    title: currentItem.content.trim(),
+    status: 'pending'
+  }
+
+  if (isEditing.value) {
+    request.put(`/itinerary-items/${currentItem.id}`, itemData)
+      .then(() => {
+        const day = days.value.find(d => d.date === currentItem.date)
+        if (day) {
+          const index = day.items.findIndex(item => item.id === currentItem.id)
+          if (index > -1) {
+            day.items.splice(index, 1, {
+              id: currentItem.id,
+              content: itemData.content,
+              date: currentItem.date,
+              time: itemData.time
+            })
+          }
+        }
+        dialogVisible.value = false
+        ElMessage.success('编辑成功')
+      })
+      .catch(error => {
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败')
+      })
+  } else {
+    request.post(`/itinerary-items`, itemData)
+      .then(() => {
+        dialogVisible.value = false
+        ElMessage.success('添加成功')
+        loadItineraryItems(planDetail.value.id)
+      })
+      .catch(error => {
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败')
+      })
+  }
+}
+
+function closeActions() {
+  showActions.value = false
+}
+
+function showAddDialog() {
+  if (activeTab.value === 'expenses') {
+    showBillDialog.value = true
+    amount.value = ''
+    billRemark.value = ''
+  } else if (activeTab.value === 'luggage') {
+    showLuggageDialog.value = true
+    luggageName.value = ''
+  }
+}
+
+function inputNumber(key) {
+  if (key === '完成') {
+    saveBill()
+    return
+  }
+
+  if (key === '×') {
+    amount.value = amount.value.slice(0, -1)
+    return
+  }
+
+  if (key === '=' || key === '+' || key === '-') {
+    return
+  }
+
+  if (key === '.' && amount.value.includes('.')) {
+    return
+  }
+
+  if (amount.value.includes('.')) {
+    const parts = amount.value.split('.')
+    const decimal = parts[1]
+    if (decimal && decimal.length >= 2) {
+      return
+    }
+  }
+
+  amount.value += key
+}
+
+function saveBill() {
+  if (!amount.value) {
+    ElMessage.warning('请输入金额')
+    return
+  }
+
+  if (!planDetail.value || !planDetail.value.id) {
+    ElMessage.error('无法获取计划ID')
+    return
+  }
+
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  const formattedDate = `${year}-${month}-${day}`
+
+  const expenseData = {
+    planId: planDetail.value.id,
+    title: billRemark.value || '未命名支出',
+    amount: parseFloat(amount.value),
+    date: formattedDate,
+    remark: billRemark.value
+  }
+
+  request.post(`/expenses`, expenseData)
+    .then(() => {
+      ElMessage.success('添加成功')
+      showBillDialog.value = false
+      amount.value = ''
+      billRemark.value = ''
+      loadExpenses(planDetail.value.id)
+    })
+    .catch(error => {
+      console.error('添加账单失败:', error)
+      ElMessage.error('添加账单失败')
+    })
+}
+
+function saveLuggage() {
+  if (!luggageName.value.trim()) {
+    ElMessage.warning('请输入物品名称')
+    return
+  }
+
+  const luggageData = {
+    planId: planDetail.value.id,
+    name: luggageName.value,
+    quantity: 1,
+    isPacked: false
+  }
+
+  request.post(`/luggage-items`, luggageData)
+    .then(() => {
+      ElMessage.success('添加成功')
+      showLuggageDialog.value = false
+      luggageName.value = ''
+      loadLuggage(planDetail.value.id)
+    })
+    .catch(error => {
+      console.error('添加行李失败:', error)
+      ElMessage.error('添加行李失败')
+    })
+}
+
+function formatTime(timeString) {
+  if (!timeString) return ''
+  if (/^\d{2}:\d{2}$/.test(timeString)) {
+    return timeString
+  }
+  try {
+    if (timeString instanceof Date) {
+      return timeString.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+    }
+    return timeString.substring(0, 5)
+  } catch (e) {
+    console.error('时间格式化错误:', e)
+    return timeString
+  }
+}
+</script>
+
+<style scoped>
+/* 样式合并自原 清单详情.html <style> 内联块；body 全局重置不迁移 */
+.detail-page {
+  background-color: #f5f7fa;
+  min-height: 100vh;
+}
+.detail-container {
+  padding: 16px;
+}
+.date-info {
+  margin-bottom: 20px;
+}
+.date-range {
+  color: #409EFF;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.duration-tag {
+  display: inline-block;
+  background: #ecf5ff;
+  color: #409EFF;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+.tabs {
+  margin-top: 20px;
+  border-bottom: 1px solid #e4e7ed;
+}
+.tab-item {
+  display: inline-block;
+  padding: 8px 16px;
+  font-size: 15px;
+  color: #606266;
+  cursor: pointer;
+  position: relative;
+}
+.tab-item.active {
+  color: #409EFF;
+}
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #409EFF;
+}
+.day-section {
+  background: white;
+  margin: 16px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1px;
+}
+.day-header {
+  padding: 12px 16px;
+  cursor: pointer;
+}
+.day-title {
+  font-size: 16px;
+  color: #303133;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.day-title .arrow-icon {
+  transition: transform 0.3s;
+}
+.day-title .arrow-icon.collapsed {
+  transform: rotate(90deg);
+}
+.day-content {
+  padding: 0 16px 16px;
+}
+.itinerary-item {
+  display: flex;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+.item-time {
+  min-width: 60px;
+  color: #409EFF;
+  font-size: 14px;
+  font-weight: 500;
+}
+.item-content {
+  flex: 1;
+  margin-left: 12px;
+  font-size: 14px;
+  color: #303133;
+}
+.add-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  color: #409EFF;
+  cursor: pointer;
+}
+.add-icon {
+  margin-right: 8px;
+}
+.action-menu {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+.action-item {
+  padding: 16px;
+  text-align: center;
+  font-size: 16px;
+  color: #303133;
+}
+.action-item.delete {
+  color: #f56c6c;
+}
+.action-item.cancel {
+  border-top: 8px solid #f5f7fa;
+}
+.add-button {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #1890ff;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+.bill-dialog {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  border-radius: 20px 20px 0 0;
+  z-index: 2000;
+}
+.bill-header {
+  position: relative;
+  padding: 16px;
+  text-align: center;
+  border-bottom: 1px solid #f5f7fa;
+}
+.bill-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+.bill-close-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  cursor: pointer;
+  font-size: 18px;
+}
+.bill-close-btn:hover {
+  color: #606266;
+}
+.bill-input {
+  padding: 16px;
+  background: white;
+  margin: 0 16px;
+}
+.remark-input {
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+.bill-amount {
+  font-size: 32px;
+  text-align: right;
+  padding: 8px;
+  color: #333;
+}
+.number-pad {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: #f5f7fa;
+  padding: 12px;
+}
+.number-key {
+  background: white;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.number-key:active {
+  background: #f5f7fa;
+}
+.complete-key {
+  background: #1890ff;
+  color: white;
+}
+.bill-list,
+.luggage-list {
+  margin-top: 16px;
+}
+.list-item {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.item-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #f0f7ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #409EFF;
+  font-size: 20px;
+}
+.item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.item-title {
+  font-size: 16px;
+  color: #303133;
+}
+.item-date {
+  font-size: 12px;
+  color: #909399;
+}
+.item-amount {
+  font-size: 16px;
+  color: #303133;
+  font-weight: 500;
+}
+.total-amount {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.total-label {
+  font-size: 14px;
+  color: #606266;
+}
+.total-value {
+  font-size: 20px;
+  color: #f56c6c;
+  font-weight: 500;
+}
+.luggage-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-left: 8px;
+}
+.status-packed {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+.status-unpacked {
+  background: #f4f4f5;
+  color: #909399;
+}
+.luggage-dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  width: 80%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+}
+.luggage-dialog-header {
+  position: relative;
+  margin-bottom: 16px;
+}
+.luggage-dialog-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+  text-align: center;
+}
+.luggage-close-btn {
+  position: absolute;
+  right: -10px;
+  top: -10px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  cursor: pointer;
+  font-size: 18px;
+}
+.luggage-close-btn:hover {
+  color: #606266;
+}
+.luggage-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+.luggage-confirm-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1890ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.luggage-confirm-btn:active {
+  background: #096dd9;
+}
+.itinerary-form {
+  padding: 16px 0;
+}
+.form-item {
+  margin-bottom: 16px;
+}
+.form-label {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+.form-input {
+  width: 100%;
+}
+</style>
