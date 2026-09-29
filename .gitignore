@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Frontend ###
+node_modules/
+dist/
+
+### WorkBuddy ###
+.workbuddy/
