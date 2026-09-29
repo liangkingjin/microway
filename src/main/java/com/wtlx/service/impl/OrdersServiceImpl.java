@@ -3,7 +3,7 @@ package com.wtlx.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Orders;
 import com.wtlx.entity.ScenicSpots;
 import com.wtlx.entity.ScenicSeckill;

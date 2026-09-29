@@ -1,6 +1,6 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.ItineraryItems;
 import com.wtlx.mapper.ItineraryItemsMapper;
 import com.wtlx.service.IItineraryItemsService;

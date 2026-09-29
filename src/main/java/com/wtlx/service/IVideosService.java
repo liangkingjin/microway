@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Videos;
 import com.baomidou.mybatisplus.extension.service.IService;
 

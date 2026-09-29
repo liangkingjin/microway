@@ -1,10 +1,9 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.service.ITbHotelRoomService;
 import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;

@@ -2,14 +2,14 @@ package com.wtlx.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.PhotoSpots;
 import com.wtlx.entity.PlaceRecommendations;
 import com.wtlx.mapper.PhotoSpotsMapper;
 import com.wtlx.mapper.PlaceRecommendationsMapper;
 import com.wtlx.service.IPlaceRecommendationsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.wtlx.vo.PlaceRecommendationVO;
+import com.wtlx.entity.vo.PlaceRecommendationVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

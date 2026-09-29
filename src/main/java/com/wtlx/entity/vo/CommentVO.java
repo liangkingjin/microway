@@ -1,4 +1,4 @@
-package com.wtlx.vo;
+package com.wtlx.entity.vo;
 
 import lombok.Data;
 

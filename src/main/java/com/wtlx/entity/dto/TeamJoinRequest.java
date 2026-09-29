@@ -1,4 +1,4 @@
-package com.wtlx.dto;
+package com.wtlx.entity.dto;
 
 import lombok.Data;
 

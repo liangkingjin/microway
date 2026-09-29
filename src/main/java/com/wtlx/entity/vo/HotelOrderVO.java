@@ -1,4 +1,4 @@
-package com.wtlx.vo;
+package com.wtlx.entity.vo;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;

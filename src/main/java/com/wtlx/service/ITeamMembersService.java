@@ -1,7 +1,7 @@
 package com.wtlx.service;
 
-import com.wtlx.dto.Result;
-import com.wtlx.dto.TeamJoinRequest;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.TeamJoinRequest;
 import com.wtlx.entity.TeamMembers;
 import com.baomidou.mybatisplus.extension.service.IService;
 

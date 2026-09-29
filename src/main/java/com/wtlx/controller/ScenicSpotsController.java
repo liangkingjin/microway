@@ -1,8 +1,8 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
-import com.wtlx.dto.ScenicSpotQuery;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.ScenicSpotQuery;
 import com.wtlx.entity.ScenicSpots;
 import com.wtlx.service.IScenicSpotsService;
 import io.swagger.annotations.Api;

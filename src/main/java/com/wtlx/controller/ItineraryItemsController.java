@@ -1,12 +1,11 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.ItineraryItems;
 import com.wtlx.service.IItineraryItemsService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
-import org.apache.ibatis.annotations.Delete;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;

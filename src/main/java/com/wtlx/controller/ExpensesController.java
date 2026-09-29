@@ -1,7 +1,7 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Expenses;
 import com.wtlx.service.IExpensesService;
 import io.swagger.annotations.Api;

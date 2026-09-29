@@ -2,8 +2,8 @@ package com.wtlx.controller;
 
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.dto.Result;
-import com.wtlx.dto.UserDTO;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.UserDTO;
 import com.wtlx.entity.Blog;
 import com.wtlx.service.IBlogService;
 import com.wtlx.utils.SystemConstants;

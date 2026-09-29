@@ -1,9 +1,8 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.VideoLikes;
-import com.wtlx.entity.Videos;
 import com.wtlx.mapper.VideoLikesMapper;
 import com.wtlx.mapper.VideosMapper;
 import com.wtlx.service.IVideoLikesService;

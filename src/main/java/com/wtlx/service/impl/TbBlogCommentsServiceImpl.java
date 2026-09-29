@@ -7,7 +7,7 @@ import com.wtlx.entity.User;
 import com.wtlx.mapper.TbBlogCommentsMapper;
 import com.wtlx.mapper.UserMapper;
 import com.wtlx.service.ITbBlogCommentsService;
-import com.wtlx.vo.CommentVO;
+import com.wtlx.entity.vo.CommentVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

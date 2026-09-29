@@ -1,10 +1,8 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Shop;
 import com.wtlx.entity.TbHotelOrder;
 import com.wtlx.entity.TbHotelRoom;
@@ -14,11 +12,10 @@ import com.wtlx.mapper.TbHotelRoomMapper;
 import com.wtlx.service.ITbHotelOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.utils.UserHolder;
-import com.wtlx.vo.HotelOrderVO;
+import com.wtlx.entity.vo.HotelOrderVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;

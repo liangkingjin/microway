@@ -1,7 +1,7 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.TravelPlans;
 import com.wtlx.service.ITravelPlansService;
 import io.swagger.annotations.Api;

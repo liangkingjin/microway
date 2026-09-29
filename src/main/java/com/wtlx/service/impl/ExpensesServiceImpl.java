@@ -1,7 +1,6 @@
 package com.wtlx.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Expenses;
 import com.wtlx.entity.TravelPlans;
 import com.wtlx.mapper.ExpensesMapper;
@@ -9,7 +8,6 @@ import com.wtlx.service.IExpensesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.service.ITravelPlansService;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestBody;
 
 import jakarta.annotation.Resource;
 import java.util.List;

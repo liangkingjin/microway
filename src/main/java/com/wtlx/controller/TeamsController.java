@@ -1,7 +1,7 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Teams;
 import com.wtlx.service.ITeamsService;
 import com.wtlx.utils.UserHolder;

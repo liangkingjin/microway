@@ -1,11 +1,11 @@
 package com.wtlx.controller;
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.TbBlogComments;
 import com.wtlx.service.ILikedService;
 import com.wtlx.service.ITbBlogCommentsService;
 import com.wtlx.utils.UserHolder;
-import com.wtlx.vo.CommentVO;
+import com.wtlx.entity.vo.CommentVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;

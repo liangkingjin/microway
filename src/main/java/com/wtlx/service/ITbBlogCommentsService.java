@@ -2,7 +2,7 @@ package com.wtlx.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.wtlx.entity.TbBlogComments;
-import com.wtlx.vo.CommentVO;
+import com.wtlx.entity.vo.CommentVO;
 
 import java.util.List;
 

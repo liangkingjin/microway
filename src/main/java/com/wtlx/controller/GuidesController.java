@@ -1,7 +1,7 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Guides;
 import com.wtlx.service.IGuidesService;
 import com.wtlx.service.impl.GuidesServiceImpl;

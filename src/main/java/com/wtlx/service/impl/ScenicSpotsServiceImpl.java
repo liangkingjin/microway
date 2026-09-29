@@ -1,8 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
-import com.wtlx.dto.Result;
-import com.wtlx.dto.ScenicSpotQuery;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.ScenicSpotQuery;
 import com.wtlx.entity.ScenicSpots;
 import com.wtlx.mapper.ScenicSpotsMapper;
 import com.wtlx.service.IScenicSpotsService;

@@ -2,10 +2,10 @@ package com.wtlx.controller;
 
 
 import cn.hutool.core.bean.BeanUtil;
-import com.wtlx.dto.LoginFormDTO;
-import com.wtlx.dto.Result;
-import com.wtlx.dto.UserDTO;
-import com.wtlx.dto.UserUpdateDTO;
+import com.wtlx.entity.dto.LoginFormDTO;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.UserDTO;
+import com.wtlx.entity.dto.UserUpdateDTO;
 import com.wtlx.entity.User;
 import com.wtlx.entity.UserInfo;
 import com.wtlx.service.IUserInfoService;

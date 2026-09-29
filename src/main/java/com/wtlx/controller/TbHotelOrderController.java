@@ -1,16 +1,15 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.TbHotelOrder;
 import com.wtlx.entity.TbHotelRoom;
 import com.wtlx.service.ITbHotelOrderService;
 import com.wtlx.service.ITbHotelRoomService;
-import com.wtlx.vo.HotelOrderDetailVO;
+import com.wtlx.entity.vo.HotelOrderDetailVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;

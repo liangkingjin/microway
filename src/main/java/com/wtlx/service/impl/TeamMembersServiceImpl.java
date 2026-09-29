@@ -1,8 +1,8 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.dto.Result;
-import com.wtlx.dto.TeamJoinRequest;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.TeamJoinRequest;
 import com.wtlx.entity.TeamMembers;
 import com.wtlx.entity.Teams;
 import com.wtlx.entity.User;

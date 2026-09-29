@@ -1,6 +1,6 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.LuggageItems;
 import com.wtlx.mapper.LuggageItemsMapper;
 import com.wtlx.service.ILuggageItemsService;

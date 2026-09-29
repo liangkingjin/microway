@@ -1,7 +1,7 @@
 package com.wtlx.service;
 
-import com.wtlx.dto.Result;
-import com.wtlx.dto.SearchParams;
+import com.wtlx.entity.dto.Result;
+import com.wtlx.entity.dto.SearchParams;
 import com.wtlx.entity.Shop;
 import com.baomidou.mybatisplus.extension.service.IService;
 

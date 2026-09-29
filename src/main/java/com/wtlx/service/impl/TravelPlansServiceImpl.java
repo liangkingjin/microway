@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.Expenses;
 import com.wtlx.entity.ItineraryItems;
 import com.wtlx.entity.LuggageItems;

@@ -2,7 +2,7 @@ package com.wtlx.controller;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.utils.SystemConstants;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;

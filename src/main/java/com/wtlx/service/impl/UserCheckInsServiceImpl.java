@@ -1,6 +1,6 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.dto.Result;
+import com.wtlx.entity.dto.Result;
 import com.wtlx.entity.CommonCityInfo;
 import com.wtlx.entity.UserCheckIns;
 import com.wtlx.mapper.UserCheckInsMapper;
