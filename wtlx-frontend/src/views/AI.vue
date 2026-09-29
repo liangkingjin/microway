@@ -57,7 +57,10 @@
                 <div class="avatar ai-avatar">AI</div>
                 <div class="message-body">
                   <div class="bubble ai-bubble" v-html="renderMarkdown(msg.content)"></div>
-                  <span class="timestamp">{{ formatTime(msg.time) }}</span>
+                  <span class="timestamp">
+                    {{ formatTime(msg.time) }}
+                    <em v-if="msg.cancelled" class="cancelled-tag">已停止</em>
+                  </span>
                 </div>
               </template>
               <template v-else>
@@ -97,9 +100,15 @@
               ref="inputRef"
             ></textarea>
             <button
+              v-if="connectionStatus === 'disconnected'"
               class="send-btn"
               @click="sendMessage"
-              :disabled="connectionStatus !== 'disconnected' || !inputMessage.trim()">发送</button>
+              :disabled="!inputMessage.trim()">发送</button>
+            <button
+              v-else
+              class="stop-btn"
+              @click="stopGeneration"
+              title="停止本次生成">停止</button>
           </div>
           <p class="input-hint">按 Enter 发送消息，Shift + Enter 换行</p>
         </div>
@@ -111,7 +120,7 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchHistory, deleteHistory, openChatStream } from '../api/ai'
+import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/ai'
 
 const router = useRouter()
 
@@ -121,6 +130,10 @@ const connectionStatus = ref('disconnected')
 const messagesRef = ref(null)
 const inputRef = ref(null)
 let eventSource = null
+// 当前生成请求的唯一凭据：取消时靠它让服务端定位到持流实例（多实例下可能不是本机）
+let currentRequestId = ''
+// 当前正在流式生成的消息对象，停止时需要给它打上"已停止"标记
+let currentStreamingMsg = null
 const sessions = ref([])
 const currentChatId = ref('')
 const currentChatTitle = ref('AI助手')
@@ -247,6 +260,7 @@ function addSessionToLocal(id, title) {
 
 function createNewChat() {
   closeEventSource()
+  cancelCurrentGeneration()
   messages.value = []
   inputMessage.value = ''
   currentChatId.value = generateUUID()
@@ -257,6 +271,7 @@ function createNewChat() {
 
 function switchChat(chatId) {
   closeEventSource()
+  cancelCurrentGeneration()
   currentChatId.value = chatId
   localStorage.setItem('ai_chat_id', chatId)
   messages.value = []
@@ -349,6 +364,36 @@ function closeEventSource() {
   }
 }
 
+// 收尾一次流式会话：退出生成态并关闭连接
+function finishStreaming() {
+  connectionStatus.value = 'disconnected'
+  currentStreamingMsg = null
+  currentRequestId = ''
+  closeEventSource()
+}
+
+// 通知服务端停止当前生成：接口可能打到任意实例，由服务端内部广播给持流实例
+function cancelCurrentGeneration() {
+  const requestId = currentRequestId
+  currentRequestId = ''
+  if (!requestId) return
+  cancelChat(requestId).catch(err => {
+    // 即便请求失败，连接断开后服务端也会自行停止，这里只记录
+    console.error('取消生成请求失败:', err)
+  })
+}
+
+// 点击"停止"：先本地收尾保证界面立刻退出生成态，再通知服务端中断
+function stopGeneration() {
+  if (currentStreamingMsg) {
+    currentStreamingMsg.cancelled = true
+  }
+  closeEventSource()
+  connectionStatus.value = 'disconnected'
+  currentStreamingMsg = null
+  cancelCurrentGeneration()
+}
+
 function sendMessage() {
   const message = inputMessage.value.trim()
   if (!message) return
@@ -369,14 +414,17 @@ function sendMessage() {
     inputRef.value.style.height = 'auto'
   }
 
+  // 上一条流如果还在生成，先让它停下（切换会话/连点发送时避免多条流并行烧 token）
   closeEventSource()
+  cancelCurrentGeneration()
   connectionStatus.value = 'connecting'
 
-  // SSE 走统一 /api（收口后 AI 接口已并入业务服务 9528），协议：delta 增量 + done 完整 + error 异常
-  eventSource = openChatStream(message, currentChatId.value)
+  // requestId 由前端生成并透传，服务端靠它定位这条流（多实例下取消请求未必落到同一台机器）
+  currentRequestId = generateUUID()
+  currentStreamingMsg = null
 
-  // 当前正在流式生成中的 AI 消息（打字机效果）
-  let streamingMsg = null
+  // SSE 走统一 /api（收口后 AI 接口已并入业务服务 9528），协议：delta 增量 + done/cancelled 完整 + error 异常
+  eventSource = openChatStream(message, currentChatId.value, currentRequestId)
 
   eventSource.onopen = () => {
     console.log('SSE 连接已打开')
@@ -386,11 +434,11 @@ function sendMessage() {
   eventSource.addEventListener('delta', (event) => {
     const data = event.data
     if (!data) return
-    if (!streamingMsg) {
-      streamingMsg = { content: '', isUser: false, time: new Date().getTime() }
-      messages.value.push(streamingMsg)
+    if (!currentStreamingMsg) {
+      currentStreamingMsg = { content: '', isUser: false, time: new Date().getTime() }
+      messages.value.push(currentStreamingMsg)
     }
-    streamingMsg.content += data
+    currentStreamingMsg.content += data
     connectionStatus.value = 'streaming'
     scrollToBottom()
   })
@@ -398,26 +446,43 @@ function sendMessage() {
   // done：本轮完整回答，替换增量缓冲确保 markdown 渲染完整正确
   eventSource.addEventListener('done', (event) => {
     const full = event.data
-    if (streamingMsg) {
-      streamingMsg.content = (full && full.trim()) ? full : streamingMsg.content
+    if (currentStreamingMsg) {
+      currentStreamingMsg.content = (full && full.trim()) ? full : currentStreamingMsg.content
     } else if (full && full.trim()) {
       addMessage(full, false)
     }
-    connectionStatus.value = 'disconnected'
-    eventSource.close()
+    finishStreaming()
+  })
+
+  // cancelled：本次生成被取消（用户停止 / 连接断开 / 新流挤占），data 为已生成部分
+  eventSource.addEventListener('cancelled', (event) => {
+    const partial = event.data
+    if (currentStreamingMsg) {
+      if (partial && partial.trim()) {
+        currentStreamingMsg.content = partial
+      }
+      currentStreamingMsg.cancelled = true
+    } else if (partial && partial.trim()) {
+      messages.value.push({
+        content: partial,
+        isUser: false,
+        time: new Date().getTime(),
+        cancelled: true
+      })
+    }
+    finishStreaming()
   })
 
   // 后端异常以名为 error 的 SSE 事件返回（MessageEvent 带 data）
   eventSource.addEventListener('error', (event) => {
     if (event.data) {
       // 若半成品消息为空则移除，避免出现空气泡
-      if (streamingMsg && !streamingMsg.content.trim()) {
-        const idx = messages.value.indexOf(streamingMsg)
+      if (currentStreamingMsg && !currentStreamingMsg.content.trim()) {
+        const idx = messages.value.indexOf(currentStreamingMsg)
         if (idx > -1) messages.value.splice(idx, 1)
       }
       addMessage('抱歉，' + event.data, false)
-      connectionStatus.value = 'disconnected'
-      eventSource.close()
+      finishStreaming()
     }
   })
 
@@ -785,6 +850,31 @@ function toggleSidebar() {
 .send-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+.stop-btn {
+  padding: 1rem 1.5rem;
+  background: #ffffff;
+  color: #b42318;
+  border: 1px solid rgba(180, 35, 24, 0.35);
+  border-radius: 0.75rem;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+.stop-btn:hover {
+  background: #fef3f2;
+  border-color: #b42318;
+}
+.cancelled-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-style: normal;
+  color: #b42318;
+  background: #fef3f2;
+  border-radius: 4px;
 }
 .input-hint {
   text-align: center;

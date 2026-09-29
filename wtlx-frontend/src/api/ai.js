@@ -22,13 +22,25 @@ export function deleteHistory(threadId) {
   return fetch(`${AI_BASE}/ai/react/history?threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' })
 }
 
-// SSE GET /ai/react/trip/chat?message=&threadId=
+// SSE GET /ai/react/trip/chat?message=&threadId=&requestId=
+// requestId 由前端生成，是取消这条流的唯一凭据（多实例下服务端靠它定位到持流实例）
 // 协议（ReactAgent 流式）：
-//   event: delta —— 模型增量文本，边生成边推送（可多次）
-//   event: done  —— 结束，data 携带本轮完整回答
-//   event: error —— 异常信息（MessageEvent 带 data）
+//   event: delta     —— 模型增量文本，边生成边推送（可多次）
+//   event: done      —— 正常结束，data 携带本轮完整回答
+//   event: cancelled —— 被取消（用户停止/断开/新流挤占），data 携带已生成部分
+//   event: error     —— 异常信息（MessageEvent 带 data）
 // 连接会在服务端 complete 后关闭（无 [DONE] 哨兵）
-export function openChatStream(message, threadId) {
-  const qs = `message=${encodeURIComponent(message)}&threadId=${encodeURIComponent(threadId)}`
+export function openChatStream(message, threadId, requestId) {
+  const qs = `message=${encodeURIComponent(message)}&threadId=${encodeURIComponent(threadId)}&requestId=${encodeURIComponent(requestId || '')}`
   return new EventSource(`${AI_BASE}/ai/react/trip/chat?${qs}`)
+}
+
+// POST /ai/react/cancel?requestId= 取消一次正在进行的生成（可打到任意实例，服务端内部广播）
+// 返回 { requestId, status }，status: cancelled=已取消 / forwarded=已广播 / rejected=ID 非法
+export async function cancelChat(requestId) {
+  if (!requestId) return { status: 'rejected' }
+  const res = await fetch(`${AI_BASE}/ai/react/cancel?requestId=${encodeURIComponent(requestId)}`, {
+    method: 'POST'
+  })
+  return res.json()
 }
