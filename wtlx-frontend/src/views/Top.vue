@@ -72,7 +72,6 @@ function loadRecommendations() {
   background: #f8f8f8;
   min-height: 100vh;
   padding-bottom: 20px;
-  padding-top: 44px;
 }
 .recommendation-card {
   margin: 15px;

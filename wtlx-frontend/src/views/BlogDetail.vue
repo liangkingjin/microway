@@ -591,7 +591,6 @@ function go(index) {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: #f8f8f8;
-  padding-top: 44px;
 }
 .page-scroll::-webkit-scrollbar {
   width: 0;

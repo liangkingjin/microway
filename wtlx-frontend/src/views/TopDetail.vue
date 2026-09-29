@@ -338,7 +338,6 @@ function toggleSpotDetail(index) {
   position: relative;
   min-height: 100vh;
   background-color: #f5f5f5;
-  padding-top: 44px;
 }
 .banner {
   position: relative;
