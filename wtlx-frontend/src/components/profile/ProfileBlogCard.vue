@@ -1,0 +1,109 @@
+<template>
+  <div class="wt-card wt-card--interactive profile-blog-card" v-on="longPress.handlers">
+    <div class="profile-blog-card__cover">
+      <img :src="cover" :alt="blog.title">
+    </div>
+
+    <div class="profile-blog-card__body">
+      <div class="profile-blog-card__title wt-clamp-2">{{ blog.title }}</div>
+      <span class="profile-blog-card__stat">
+        <img src="/imgs/thumbup.png" alt=""> {{ blog.liked }}
+      </span>
+      <span class="profile-blog-card__stat">
+        <el-icon><ChatDotRound /></el-icon> {{ blog.comments }}
+      </span>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { ChatDotRound } from '@element-plus/icons-vue'
+import { useLongPress } from '../../composables/useLongPress'
+
+// 游记卡片：长按触发删除确认（手势逻辑抽到 useLongPress，事件上抛给父级）
+const props = defineProps({
+  blog: { type: Object, required: true }
+})
+const emit = defineEmits(['long-press'])
+
+const longPress = useLongPress(() => emit('long-press', props.blog))
+
+const cover = computed(() => (props.blog.images || '').split(',')[0])
+</script>
+
+<style scoped>
+.profile-blog-card {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+.profile-blog-card:hover {
+  transform: translateY(-2px);
+}
+.profile-blog-card__cover {
+  flex: 0 0 40%;
+  align-self: flex-start;
+  /* aspect-ratio 精准控比（旧的 padding-bottom 百分比基准是卡片整宽，会撑坏布局） */
+  aspect-ratio: 4 / 3;
+  position: relative;
+  overflow: hidden;
+  background: #eef1f5;
+}
+.profile-blog-card__cover img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-blog-card__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--wt-space-3) var(--wt-space-4);
+}
+.profile-blog-card__title {
+  margin: 0 0 var(--wt-space-2);
+  font-size: var(--wt-fs-md);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--wt-text-1);
+  word-break: break-word;
+}
+.profile-blog-card__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wt-space-1);
+  margin-right: var(--wt-space-3);
+  font-size: var(--wt-fs-xs);
+  line-height: 1;
+  color: var(--wt-text-3);
+  vertical-align: middle;
+}
+.profile-blog-card__stat img {
+  display: block;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+.profile-blog-card__stat .el-icon {
+  font-size: var(--wt-fs-md);
+}
+
+@media (min-width: 768px) {
+  .profile-blog-card__cover {
+    flex: 0 0 240px;
+  }
+  .profile-blog-card__body {
+    padding: var(--wt-space-4);
+  }
+}
+
+@media (max-width: 360px) {
+  .profile-blog-card__cover {
+    flex: 0 0 36%;
+  }
+}
+</style>

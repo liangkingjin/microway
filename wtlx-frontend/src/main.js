@@ -6,6 +6,9 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
+// 设计令牌须最先加载，common.css 与组件样式均依赖 --wt-* 变量
+import './styles/variables.css'
+import './styles/common.css'
 import './styles/main.css'
 import './styles/header.css'
 

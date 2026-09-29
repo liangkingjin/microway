@@ -1,0 +1,76 @@
+/* ==========================================================================
+   全局设计令牌（微途旅行 · wtlx）
+   ------------------------------------------------------------------------
+   所有颜色 / 间距 / 圆角 / 字阶 / 阴影 / 布局尺寸统一在此声明，
+   组件内一律通过 var(--wt-*) 引用，禁止再写死数值。
+   命名规范：--wt-<类别>-<语义>，类别 = space / radius / color / bg / text /
+             border / shadow / fs / 布局量
+   注意：--wt-gutter 中的 100% 在"使用处"解析（参照该元素的包含块宽度），
+        因此 :root 上声明即可让任意层级的版心自动居中。
+   ========================================================================== */
+:root {
+  /* ---- 间距节奏（4px 基准） ---- */
+  --wt-space-1: 4px;
+  --wt-space-2: 8px;
+  --wt-space-3: 12px;
+  --wt-space-4: 16px;
+  --wt-space-5: 20px;
+  --wt-space-6: 24px;
+
+  /* ---- 圆角 ---- */
+  --wt-radius-sm: 8px;
+  --wt-radius-md: 12px;
+  --wt-radius-lg: 16px;
+  --wt-radius-pill: 999px;
+
+  /* ---- 品牌色与语义色 ---- */
+  --wt-color-brand: #409eff;
+  --wt-color-brand-dark: #2f7fd8;
+  --wt-color-brand-tint: #8ecae6;
+  --wt-color-warning: #e6a23c;
+  --wt-color-success: #67c23a;
+  --wt-color-danger: #f56c6c;
+
+  /* ---- 背景 ---- */
+  --wt-bg-page: #f5f7fa;
+  --wt-bg-surface: #ffffff;
+  --wt-bg-muted: #f7f9fc;
+
+  /* ---- 文字层级 ---- */
+  --wt-text-1: #303133; /* 标题 / 主信息 */
+  --wt-text-2: #606266; /* 正文 / 次要信息 */
+  --wt-text-3: #909399; /* 辅助说明 */
+  --wt-text-4: #c0c4cc; /* 图标 / 占位 */
+
+  /* ---- 描边 ---- */
+  --wt-border: #ebeef5;
+  --wt-border-strong: #e4e7ed;
+
+  /* ---- 阴影 ---- */
+  --wt-shadow-card: 0 2px 12px rgba(31, 45, 61, 0.06);
+  --wt-shadow-float: 0 8px 24px rgba(31, 45, 61, 0.12);
+
+  /* ---- 字体与字阶 ---- */
+  --wt-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --wt-fs-xl: 20px;
+  --wt-fs-lg: 16px;
+  --wt-fs-md: 14px;
+  --wt-fs-sm: 13px;
+  --wt-fs-xs: 12px;
+
+  /* ---- 布局 ---- */
+  --wt-page-max: 720px; /* 桌面端版心宽度 */
+  --wt-gutter: max(var(--wt-space-4), calc((100% - var(--wt-page-max)) / 2));
+  --wt-footer-height: 50px;
+  --wt-page-bottom: calc(
+    var(--wt-footer-height) + var(--wt-space-4) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+/* 桌面端放宽版心：改一处即全站生效 */
+@media (min-width: 768px) {
+  :root {
+    --wt-page-max: 760px;
+  }
+}
