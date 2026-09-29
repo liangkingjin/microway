@@ -1,8 +1,14 @@
 <template>
   <div class="chat-layout">
+    <!-- 移动端侧边栏遮罩，点击可收起 -->
+    <div class="sidebar-backdrop" v-if="showSidebar" @click="showSidebar = false"></div>
     <!-- 会话侧边栏 -->
     <div class="sidebar" v-if="showSidebar">
       <div class="sidebar-header">
+        <div class="sidebar-back-btn" @click="toggleSidebar">
+          <el-icon><ArrowLeft /></el-icon>
+          <span>返回</span>
+        </div>
         <div class="new-chat-btn" @click="createNewChat">
           <span>+</span> 新建会话
         </div>
@@ -132,8 +138,12 @@ const inputRef = ref(null)
 let eventSource = null
 // 当前生成请求的唯一凭据：取消时靠它让服务端定位到持流实例（多实例下可能不是本机）
 let currentRequestId = ''
-// 当前正在流式生成的消息对象，停止时需要给它打上"已停止"标记
-let currentStreamingMsg = null
+// 当前正在流式生成的消息在 messages 数组中的下标；
+// 用下标而不是对象引用，确保修改的是 messages 里的响应式代理，触发实时渲染。
+let currentStreamingIndex = -1
+// 为缓解高频 delta 带来的 DOM 抖动，把同一帧内到达的增量先缓冲，按 rAF 批量追加
+let pendingDelta = ''
+let deltaRafId = null
 const sessions = ref([])
 const currentChatId = ref('')
 const currentChatTitle = ref('AI助手')
@@ -153,6 +163,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   closeEventSource()
+  discardStreamingState()
 })
 
 // 输入内容变化时自适应高度
@@ -261,6 +272,7 @@ function addSessionToLocal(id, title) {
 function createNewChat() {
   closeEventSource()
   cancelCurrentGeneration()
+  discardStreamingState()
   messages.value = []
   inputMessage.value = ''
   currentChatId.value = generateUUID()
@@ -272,6 +284,7 @@ function createNewChat() {
 function switchChat(chatId) {
   closeEventSource()
   cancelCurrentGeneration()
+  discardStreamingState()
   currentChatId.value = chatId
   localStorage.setItem('ai_chat_id', chatId)
   messages.value = []
@@ -357,6 +370,35 @@ function scrollToBottom() {
   })
 }
 
+// 把缓冲中的增量真正追加到当前 AI 消息，并滚动到底部
+function flushDelta() {
+  deltaRafId = null
+  if (pendingDelta && currentStreamingIndex >= 0) {
+    messages.value[currentStreamingIndex].content += pendingDelta
+    pendingDelta = ''
+    scrollToBottom()
+  }
+}
+
+// 同步刷新缓冲（用于 done/error/cancelled/stop 等收尾场景）
+function flushDeltaSync() {
+  if (deltaRafId) {
+    cancelAnimationFrame(deltaRafId)
+    deltaRafId = null
+  }
+  flushDelta()
+}
+
+// 切换/新建会话时丢弃未追加的缓冲，避免把旧流的残片挂到新会话
+function discardStreamingState() {
+  if (deltaRafId) {
+    cancelAnimationFrame(deltaRafId)
+    deltaRafId = null
+  }
+  pendingDelta = ''
+  currentStreamingIndex = -1
+}
+
 function closeEventSource() {
   if (eventSource) {
     eventSource.close()
@@ -366,8 +408,13 @@ function closeEventSource() {
 
 // 收尾一次流式会话：退出生成态并关闭连接
 function finishStreaming() {
+  if (deltaRafId) {
+    cancelAnimationFrame(deltaRafId)
+    deltaRafId = null
+  }
+  pendingDelta = ''
+  currentStreamingIndex = -1
   connectionStatus.value = 'disconnected'
-  currentStreamingMsg = null
   currentRequestId = ''
   closeEventSource()
 }
@@ -385,12 +432,12 @@ function cancelCurrentGeneration() {
 
 // 点击"停止"：先本地收尾保证界面立刻退出生成态，再通知服务端中断
 function stopGeneration() {
-  if (currentStreamingMsg) {
-    currentStreamingMsg.cancelled = true
+  flushDeltaSync()
+  if (currentStreamingIndex >= 0) {
+    messages.value[currentStreamingIndex].cancelled = true
   }
   closeEventSource()
   connectionStatus.value = 'disconnected'
-  currentStreamingMsg = null
   cancelCurrentGeneration()
 }
 
@@ -415,13 +462,15 @@ function sendMessage() {
   }
 
   // 上一条流如果还在生成，先让它停下（切换会话/连点发送时避免多条流并行烧 token）
+  flushDeltaSync()
   closeEventSource()
   cancelCurrentGeneration()
   connectionStatus.value = 'connecting'
 
   // requestId 由前端生成并透传，服务端靠它定位这条流（多实例下取消请求未必落到同一台机器）
   currentRequestId = generateUUID()
-  currentStreamingMsg = null
+  currentStreamingIndex = -1
+  pendingDelta = ''
 
   // SSE 走统一 /api（收口后 AI 接口已并入业务服务 9528），协议：delta 增量 + done/cancelled 完整 + error 异常
   eventSource = openChatStream(message, currentChatId.value, currentRequestId)
@@ -430,24 +479,27 @@ function sendMessage() {
     console.log('SSE 连接已打开')
   }
 
-  // delta：模型增量文本，逐块追加到当前 AI 消息
+  // delta：模型增量文本，按 rAF 批量追加到当前 AI 消息，既实时又避免逐字重排
   eventSource.addEventListener('delta', (event) => {
     const data = event.data
     if (!data) return
-    if (!currentStreamingMsg) {
-      currentStreamingMsg = { content: '', isUser: false, time: new Date().getTime() }
-      messages.value.push(currentStreamingMsg)
+    if (currentStreamingIndex < 0) {
+      messages.value.push({ content: '', isUser: false, time: Date.now() })
+      currentStreamingIndex = messages.value.length - 1
     }
-    currentStreamingMsg.content += data
+    pendingDelta += data
     connectionStatus.value = 'streaming'
-    scrollToBottom()
+    if (!deltaRafId) {
+      deltaRafId = requestAnimationFrame(flushDelta)
+    }
   })
 
   // done：本轮完整回答，替换增量缓冲确保 markdown 渲染完整正确
   eventSource.addEventListener('done', (event) => {
+    flushDeltaSync()
     const full = event.data
-    if (currentStreamingMsg) {
-      currentStreamingMsg.content = (full && full.trim()) ? full : currentStreamingMsg.content
+    if (currentStreamingIndex >= 0) {
+      messages.value[currentStreamingIndex].content = (full && full.trim()) ? full : messages.value[currentStreamingIndex].content
     } else if (full && full.trim()) {
       addMessage(full, false)
     }
@@ -456,17 +508,18 @@ function sendMessage() {
 
   // cancelled：本次生成被取消（用户停止 / 连接断开 / 新流挤占），data 为已生成部分
   eventSource.addEventListener('cancelled', (event) => {
+    flushDeltaSync()
     const partial = event.data
-    if (currentStreamingMsg) {
+    if (currentStreamingIndex >= 0) {
       if (partial && partial.trim()) {
-        currentStreamingMsg.content = partial
+        messages.value[currentStreamingIndex].content = partial
       }
-      currentStreamingMsg.cancelled = true
+      messages.value[currentStreamingIndex].cancelled = true
     } else if (partial && partial.trim()) {
       messages.value.push({
         content: partial,
         isUser: false,
-        time: new Date().getTime(),
+        time: Date.now(),
         cancelled: true
       })
     }
@@ -476,10 +529,10 @@ function sendMessage() {
   // 后端异常以名为 error 的 SSE 事件返回（MessageEvent 带 data）
   eventSource.addEventListener('error', (event) => {
     if (event.data) {
+      flushDeltaSync()
       // 若半成品消息为空则移除，避免出现空气泡
-      if (currentStreamingMsg && !currentStreamingMsg.content.trim()) {
-        const idx = messages.value.indexOf(currentStreamingMsg)
-        if (idx > -1) messages.value.splice(idx, 1)
+      if (currentStreamingIndex >= 0 && !messages.value[currentStreamingIndex].content.trim()) {
+        messages.value.splice(currentStreamingIndex, 1)
       }
       addMessage('抱歉，' + event.data, false)
       finishStreaming()
@@ -611,6 +664,25 @@ function toggleSidebar() {
 }
 .session-delete:hover {
   background: #e53e3e;
+}
+/* 侧边栏内返回/收起入口 */
+.sidebar-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 4px 0;
+  color: #a0aec0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.sidebar-back-btn:hover {
+  color: #fff;
+}
+/* 移动端遮罩：桌面端隐藏 */
+.sidebar-backdrop {
+  display: none;
 }
 .main-content {
   flex: 1;
@@ -970,5 +1042,26 @@ function toggleSidebar() {
   margin-top: 16px;
   margin-bottom: 8px;
   color: #333;
+}
+
+/* 移动端：侧边栏以抽屉形式浮出，并加遮罩 */
+@media (max-width: 767px) {
+  .chat-layout {
+    position: relative;
+  }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 1000;
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 999;
+  }
 }
 </style>
