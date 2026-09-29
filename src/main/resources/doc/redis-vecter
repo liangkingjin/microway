@@ -1,0 +1,5 @@
+docker run -d \
+  --name redis-stack-6380 \
+  -p 6380:6379 \
+  --restart always \
+  redis/redis-stack:latest
