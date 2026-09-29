@@ -247,64 +247,184 @@ function editBirthday() {
 </script>
 
 <style scoped>
-/* 样式合并自原 info-edit.html <style> 内联块；body/#app 全局重置不迁移 */
+/* ==========================================================================
+   资料编辑页 — 布局与样式统一（设计令牌与 Info.vue 个人主页保持一致）
+   说明：template / script 结构与交互逻辑未改动，本文件仅重写样式层。
+   1) 移除遗留的 70px 顶部占位（HeaderBar 为 sticky，本身占据文档流高度）
+   2) 左右边距统一走 --pp-gutter，与 Info.vue 版心对齐
+   3) 修复右侧取值文字继承 html 的 12px 字号的层级错乱、头像 35px 尺寸不一、
+      模板内写死 width:150px 导致的窄屏挤压
+   ========================================================================== */
 .info-edit-page {
-  background: #f5f7fa;
+  /* ---- 间距节奏 ---- */
+  --pp-gap-xs: 4px;
+  --pp-gap-sm: 8px;
+  --pp-gap-md: 12px;
+  --pp-gap-lg: 16px;
+  --pp-gap-xl: 24px;
+
+  /* ---- 圆角 ---- */
+  --pp-radius-sm: 8px;
+  --pp-radius-md: 12px;
+
+  /* ---- 配色 ---- */
+  --pp-brand: #409eff;
+  --pp-bg: #f5f7fa;
+  --pp-surface: #ffffff;
+  --pp-surface-muted: #f7f9fc;
+  --pp-surface-active: #eff2f7;
+  --pp-text-1: #303133;
+  --pp-text-2: #606266;
+  --pp-text-3: #909399;
+  --pp-text-4: #c0c4cc;
+  --pp-border: #ebeef5;
+
+  /* ---- 阴影 ---- */
+  --pp-shadow-card: 0 2px 12px rgba(31, 45, 61, 0.06);
+
+  /* ---- 字体与字阶 ---- */
+  --pp-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --pp-fs-lg: 16px;
+  --pp-fs-md: 14px;
+  --pp-fs-sm: 13px;
+
+  /* ---- 版心 ---- */
+  --pp-page-max: 720px;
+  --pp-gutter: max(var(--pp-gap-lg), calc((100% - var(--pp-page-max)) / 2));
+
+  background: var(--pp-bg);
   min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+  font-family: var(--pp-font);
+  -webkit-tap-highlight-color: transparent;
 }
+
 .edit-container {
-  padding: 70px 16px 20px;
+  padding: var(--pp-gap-lg) var(--pp-gutter) var(--pp-gap-xl);
 }
+
 .info-box {
-  background: #fff;
-  border-radius: 8px;
+  background: var(--pp-surface);
+  border-radius: var(--pp-radius-md);
   overflow: hidden;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  margin-bottom: var(--pp-gap-lg);
+  box-shadow: var(--pp-shadow-card);
 }
+.info-box:last-child {
+  margin-bottom: 0;
+}
+
 .info-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  gap: var(--pp-gap-md);
+  min-height: 60px; /* 统一行高：头像行（36px 图 + 24px 内边距）与文字行一致 */
+  padding: var(--pp-gap-md) var(--pp-gap-lg);
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.2s ease;
 }
 .info-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--pp-surface-muted);
 }
+.info-item:active {
+  background-color: var(--pp-surface-active);
+}
+
 .info-label {
-  font-size: 16px;
-  color: #303133;
+  flex: 0 0 auto;
+  font-size: var(--pp-fs-lg);
   font-weight: 500;
+  line-height: 1.5;
+  color: var(--pp-text-1);
 }
+
 .info-btn {
   display: flex;
   align-items: center;
-  color: #909399;
+  justify-content: flex-end;
+  gap: var(--pp-gap-sm);
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--pp-fs-md); /* 原继承 html 的 12px，与左侧 16px 标签层级失衡 */
+  line-height: 1.5;
+  color: var(--pp-text-2);
+}
+.info-btn > div {
+  min-width: 0;
+  max-width: min(46vw, 320px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+/* 模板内写死的 width:150px 在窄屏会挤压行内容，改为自适应 + 上限截断 */
+.info-btn > div[style] {
+  width: auto !important;
 }
 .info-btn img {
-  width: 35px;
-  height: 35px;
+  flex: 0 0 auto;
+  display: block;
+  width: 36px; /* 原 35px，与统一后的行高对齐 */
+  height: 36px;
   border-radius: 50%;
+  border: 1px solid var(--pp-border);
   object-fit: cover;
-  margin-right: 8px;
+  margin-right: 0;
 }
 .info-btn .arrow {
-  margin-left: 8px;
-  color: #c0c4cc;
-  font-size: 14px;
+  flex: 0 0 auto;
+  margin-left: 0;
+  color: var(--pp-text-4);
+  font-size: var(--pp-fs-md);
 }
+
 .divider {
   height: 1px;
-  background-color: #ebeef5;
-  margin: 0 16px;
+  margin: 0 var(--pp-gap-lg);
+  background-color: var(--pp-border);
 }
+
+/* 弹窗宽度沿用原规则（ElMessageBox 挂载在 body，作用域样式不生效，仅作兜底声明） */
 :deep(.el-message-box) {
   width: 85% !important;
   max-width: 320px !important;
 }
 :deep(.el-textarea__inner) {
   min-height: 80px !important;
+}
+
+/* ---------------------- 响应式 ---------------------- */
+@media (min-width: 768px) {
+  .info-edit-page {
+    --pp-page-max: 760px;
+  }
+  .edit-container {
+    padding-top: var(--pp-gap-xl);
+  }
+  .info-item {
+    min-height: 64px;
+    padding: var(--pp-gap-md) var(--pp-gap-xl);
+  }
+  .divider {
+    margin: 0 var(--pp-gap-xl);
+  }
+  .info-btn > div {
+    max-width: 380px;
+  }
+}
+
+@media (max-width: 360px) {
+  .info-label {
+    font-size: var(--pp-fs-md);
+  }
+  .info-item {
+    padding: var(--pp-gap-md) var(--pp-gap-md);
+  }
+  .divider {
+    margin: 0 var(--pp-gap-md);
+  }
 }
 </style>
