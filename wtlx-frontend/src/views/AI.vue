@@ -575,6 +575,15 @@ function sendMessage() {
       const idx = ensureStreamingMessage()
       messages.value[idx].content = event.data
     }
+    // 正文与卡片都为空时不留空气泡（生成失败由 error 事件单独提示）
+    const idx = ensureStreamingMessage()
+    const msg = messages.value[idx]
+    if (!msg.content && !(msg.cards && msg.cards.length)) {
+      messages.value.splice(idx, 1)
+      currentStreamingIndex = -1
+      finishStreaming()
+      return
+    }
     finishStreaming()
   })
 

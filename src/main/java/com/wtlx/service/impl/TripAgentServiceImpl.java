@@ -204,6 +204,7 @@ public class TripAgentServiceImpl implements TripAgentService {
 
                 CountDownLatch finishLatch = new CountDownLatch(1);
                 long[] lastCheckAt = {System.currentTimeMillis()};
+                AtomicReference<Throwable> failureRef = new AtomicReference<>();
 
                 Disposable disposable = tripReactAgent.stream(message, config)
                         .doOnNext(output -> {
@@ -230,7 +231,11 @@ public class TripAgentServiceImpl implements TripAgentService {
                                 output -> {
                                 },
                                 error -> {
+                                    // 流内部报错（模型调用失败、工具异常等）必须记下来：
+                                    // 否则会走到 done 分支，前端只收到空正文，看不到任何错误提示。
+                                    // 取消属于预期行为，不算失败。
                                     if (!(error instanceof GenerationCancelledException)) {
+                                        failureRef.set(error);
                                         log.error("ReactAgent 流式执行异常, requestId: {}", requestId, error);
                                     }
                                 },
@@ -249,7 +254,12 @@ public class TripAgentServiceImpl implements TripAgentService {
                         .thinking(steps)
                         .build();
 
-                if (signalRef.get() == SignalType.CANCEL) {
+                if (failureRef.get() != null) {
+                    // 生成失败：明确告知前端，而不是让前端收一个空正文的 done
+                    String reason = failureRef.get().getMessage();
+                    log.error("本轮生成失败, threadId: {}, requestId: {}", threadId, requestId);
+                    send(emitter, "error", "生成失败: " + (reason == null ? "未知错误" : reason));
+                } else if (signalRef.get() == SignalType.CANCEL) {
                     log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字",
                             threadId, requestId, answer.length());
                     sendJson(emitter, "cancelled", payload);
