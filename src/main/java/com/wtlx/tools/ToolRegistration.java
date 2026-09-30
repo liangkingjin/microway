@@ -27,13 +27,11 @@ public class ToolRegistration {
      * 注册所有工具（本地工具 + MCP 工具）
      *
      * @param mcpToolCallbackProvider MCP 工具回调提供者（由 Spring AI MCP 自动配置）
-     * @param webSearchTool           网页搜索工具（Spring Bean）
      * @param ragRetrievalTool        RAG 知识库检索工具（Spring Bean）
      * @return 合并后的工具回调数组
      */
     @Bean
     public ToolCallback[] allTools(ToolCallbackProvider mcpToolCallbackProvider,
-                                   WebSearchTool webSearchTool,
                                    RagRetrievalTool ragRetrievalTool) {
         log.info("开始注册工具集");
 
@@ -47,7 +45,6 @@ public class ToolRegistration {
 
         ToolCallback[] localTools = ToolCallbacks.from(
                 fileOperationTool,
-                webSearchTool,
                 webScrapingTool,
                 resourceDownloadTool,
                 terminalOperationTool,

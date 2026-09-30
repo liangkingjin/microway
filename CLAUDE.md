@@ -135,7 +135,7 @@ GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, 免登录)
 
 **为什么对话走 OpenAI 兼容模式而不是 DashScope**：`spring-ai-alibaba-starter-dashscope` 1.1.2.x 硬编码旧版 REST 协议（`model`+`input`+`parameters`），qwen3.x / deepseek-v4 系列会直接 `InvalidParameter: url error`，只改 `completions-path` 也不行。所以对话模型改用 `spring-ai-starter-model-openai` 指向百炼兼容模式端点（`model: qwen3.7-flash`），而 **Embedding 仍留在 DashScope**（`text-embedding-v3` 在旧路径正常）。两个 starter 并存后 bean 必须显式消歧：`@Qualifier("openAiChatModel")` / `@Qualifier("dashscopeEmbeddingModel")`，命名规律 `openAi*` vs `dashscope*`。删掉任一 qualifier 或把对话模型换回 DashScope 都会直接起不来。
 
-- **工具是手工登记的**：全部列在 `tools/ToolRegistration.allTools`（本地工具 + MCP 工具 `mcpToolCallbackProvider.getToolCallbacks()`）。加工具只改这一个类。注意本地工具里 `FileOperationTool` / `WebScrapingTool` / `ResourceDownloadTool` / `TerminalOperationTool` / `TerminateTool` 是 `new` 出来的、非 Spring bean，只有 `WebSearchTool` 和 `RagRetrievalTool` 是 `@Component`。`TerminalOperationTool` 会执行 `cmd.exe /c`，且 `/ai/**` 免鉴权。
+- **工具是手工登记的**：全部列在 `tools/ToolRegistration.allTools`（本地工具 + MCP 工具 `mcpToolCallbackProvider.getToolCallbacks()`）。加工具只改这一个类。注意本地工具里 `FileOperationTool` / `WebScrapingTool` / `ResourceDownloadTool` / `TerminalOperationTool` / `TerminateTool` 是 `new` 出来的、非 Spring bean，只有 `RagRetrievalTool` 是 `@Component`（原 `WebSearchTool` 已删除：SearchAPI 额度耗尽且基本用不到）。`TerminalOperationTool` 会执行 `cmd.exe /c`，且 `/ai/**` 免鉴权。
 - **记忆两层**：框架层 `MemorySaver`（JVM 内、按 threadId，不跨实例）；应用层 `ConversationMemoryServiceImpl`（PG，摘要 + 最近 8 轮 = 16 条）。超过 9 条用户消息触发 `SummaryCompressorImpl` 压缩（也用 `openAiChatModel`）。
 - **ThreadLocal 靠不住**：整条链路跑在 Reactor / ForkJoinPool 线程上，`ConversationContextHolder` 只是兜底，可靠通道是 `RunnableConfig` metadata 里的 `conversationId`（`ConversationMemoryInterceptor.CONVERSATION_ID_KEY`）。
 
@@ -156,7 +156,7 @@ GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, 免登录)
 
 - `GenerationCancelService.cancel()`：先查本地 `GenerationRegistry`，**无论如何**都写 Redis 标记 `ai:generation:cancel:flag:{id}`（TTL 60s）并向 Pub/Sub 主题广播；每个实例启动时 `CancelBroadcastListener` 订阅，只有本地持有该 requestId 的实例才动作。返回 `CANCELLED`/`FORWARDED`/`REJECTED`。requestId 用 `SAFE_ID = [A-Za-z0-9_-]{8,64}` 校验，防 Redis key 注入。
 - 中断手段是保存 `Disposable` 并 `dispose()`（切断到 DashScope 的 HTTP 连接），不是协议级 stop。`doOnNext` 每 chunk 查本地标记、每 2s 查一次 Redis 兜底。
-- **已知限制**：非流式节点用 `Mono.fromFuture`，无法中断 —— 阻塞工具（WebSearch / Terminal 等）执行期间没有 chunk，取消要等下一个 Flux 事件才生效。
+- **已知限制**：非流式节点用 `Mono.fromFuture`，无法中断 —— 阻塞工具（WebScraping / Terminal 等）执行期间没有 chunk，取消要等下一个 Flux 事件才生效。
 
 ### MCP
 

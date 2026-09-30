@@ -116,10 +116,6 @@ trip-agent:
     # 启动时是否对缺失索引的来源做全量回填（量大时建议关闭，改由管理接口触发）
     rebuild-on-startup: false
 
-# ==================== AI WebSearchTool 配置 ====================
-search-api:
-  api-key: tbD2BBpbA39UzDvzcnmTRAHL
-
 # ==================== 接口文档 ====================
 springdoc:
   swagger-ui:
