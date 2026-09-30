@@ -205,6 +205,9 @@ public class TripAgentServiceImpl implements TripAgentService {
                 CountDownLatch finishLatch = new CountDownLatch(1);
                 long[] lastCheckAt = {System.currentTimeMillis()};
                 AtomicReference<Throwable> failureRef = new AtomicReference<>();
+                // 流内抛出的取消异常会被 Reactor 转成 ON_ERROR 信号，doFinally 拿不到 CANCEL，
+                // 故单独记一个标记，供终态判断使用——否则"用户主动停止"会被当成功收尾发 done
+                AtomicBoolean cancelledByStream = new AtomicBoolean(false);
 
                 Disposable disposable = tripReactAgent.stream(message, config)
                         .doOnNext(output -> {
@@ -233,8 +236,10 @@ public class TripAgentServiceImpl implements TripAgentService {
                                 error -> {
                                     // 流内部报错（模型调用失败、工具异常等）必须记下来：
                                     // 否则会走到 done 分支，前端只收到空正文，看不到任何错误提示。
-                                    // 取消属于预期行为，不算失败。
-                                    if (!(error instanceof GenerationCancelledException)) {
+                                    // 取消属于预期行为，不算失败，但要单独记住以便终态判定。
+                                    if (isCancellation(error)) {
+                                        cancelledByStream.set(true);
+                                    } else {
                                         failureRef.set(error);
                                         log.error("ReactAgent 流式执行异常, requestId: {}", requestId, error);
                                     }
@@ -259,9 +264,10 @@ public class TripAgentServiceImpl implements TripAgentService {
                     String reason = failureRef.get().getMessage();
                     log.error("本轮生成失败, threadId: {}, requestId: {}", threadId, requestId);
                     send(emitter, "error", "生成失败: " + (reason == null ? "未知错误" : reason));
-                } else if (signalRef.get() == SignalType.CANCEL) {
-                    log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字",
-                            threadId, requestId, answer.length());
+                } else if (signalRef.get() == SignalType.CANCEL || cancelledByStream.get()) {
+                    log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字, 取消来源: {}",
+                            threadId, requestId, answer.length(),
+                            cancelledByStream.get() ? "流内取消标记" : "订阅被 dispose");
                     sendJson(emitter, "cancelled", payload);
                 } else {
                     sendJson(emitter, "done", payload);
@@ -343,6 +349,23 @@ public class TripAgentServiceImpl implements TripAgentService {
                 .cards(cards == null ? List.of() : cards)
                 .thinking(steps)
                 .build();
+    }
+
+    /**
+     * 判断流式异常是否由取消引起。
+     * <p>
+     * 沿 cause 链查找，兼容上层算子（重试、包装类）把取消异常包一层的情况。
+     */
+    private static boolean isCancellation(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            if (t instanceof GenerationCancelledException) {
+                return true;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
     }
 
     @PreDestroy
