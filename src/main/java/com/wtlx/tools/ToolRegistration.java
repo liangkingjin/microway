@@ -37,13 +37,12 @@ public class ToolRegistration {
         log.info("开始注册工具集");
 
         // 1. 收集本地工具（均为 Spring Bean）
+        // 注：PDF / Markdown 落盘生成工具已下线——输出形态改为"正文 + 思考步骤"结构化返回前端
         FileOperationTool fileOperationTool = new FileOperationTool();
         WebScrapingTool webScrapingTool = new WebScrapingTool();
         ResourceDownloadTool resourceDownloadTool = new ResourceDownloadTool();
         TerminalOperationTool terminalOperationTool = new TerminalOperationTool();
-        PDFGenerationTool pdfGenerationTool = new PDFGenerationTool();
         TerminateTool terminateTool = new TerminateTool();
-        MarkdownGenerationTool markdownGenerationTool = new MarkdownGenerationTool();
 
         ToolCallback[] localTools = ToolCallbacks.from(
                 fileOperationTool,
@@ -51,9 +50,7 @@ public class ToolRegistration {
                 webScrapingTool,
                 resourceDownloadTool,
                 terminalOperationTool,
-                pdfGenerationTool,
                 terminateTool,
-                markdownGenerationTool,
                 ragRetrievalTool
         );
 

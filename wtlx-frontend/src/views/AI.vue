@@ -62,7 +62,9 @@
               <template v-if="!msg.isUser">
                 <div class="avatar ai-avatar">AI</div>
                 <div class="message-body">
-                  <div class="bubble ai-bubble" v-html="renderMarkdown(msg.content)"></div>
+                  <ThinkingPanel :steps="msg.thinking || []" :streaming="!!msg.streaming" />
+                  <div v-if="msg.content" class="bubble ai-bubble" v-html="renderMarkdown(msg.content)"></div>
+                  <BlogCardGrid :cards="msg.cards || []" />
                   <span class="timestamp">
                     {{ formatTime(msg.time) }}
                     <em v-if="msg.cancelled" class="cancelled-tag">已停止</em>
@@ -127,6 +129,8 @@
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/ai'
+import ThinkingPanel from '../components/chat/ThinkingPanel.vue'
+import BlogCardGrid from '../components/chat/BlogCardGrid.vue'
 
 const router = useRouter()
 
@@ -178,12 +182,23 @@ function renderMarkdown(text) {
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+    // 列表块须先于斜体处理：连续的 "- xxx" 行整体包成 <ul>
+    .replace(/((?:^[-*] .+$\n?)+)/gm, (block) =>
+      '<ul>' + block.replace(/^[-*] (.+)$/gm, '<li>$1</li>') + '</ul>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
   return html
+}
+
+// SSE data 兼容解析：新协议为 JSON，解析失败时按纯文本兜底
+function parseJson(text) {
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch (e) {
+    return null
+  }
 }
 
 function goBack() {
@@ -304,10 +319,13 @@ async function loadHistory(threadId) {
       messages.value = []
       return
     }
+    // 历史只存结论正文（思考步骤与卡片不落库），故这两项恢复为空集合
     messages.value = history.map(m => ({
       content: m.content || '',
       isUser: m.role === 'USER',
-      time: Date.now()
+      time: Date.now(),
+      thinking: [],
+      cards: []
     }))
     nextTick(() => scrollToBottom())
   } catch (err) {
@@ -357,9 +375,43 @@ function addMessage(content, isUser) {
   messages.value.push({
     content,
     isUser,
-    time: new Date().getTime()
+    time: new Date().getTime(),
+    thinking: [],
+    cards: []
   })
   scrollToBottom()
+}
+
+// 思考步骤与卡片可能先于正文到达，统一在这里确保 AI 消息气泡已创建
+function ensureStreamingMessage() {
+  if (currentStreamingIndex < 0) {
+    messages.value.push({
+      content: '',
+      isUser: false,
+      time: Date.now(),
+      thinking: [],
+      cards: [],
+      streaming: true
+    })
+    currentStreamingIndex = messages.value.length - 1
+  }
+  return currentStreamingIndex
+}
+
+// 按 seq 幂等写入思考步骤：同序号为"更新该步骤"（工具参数逐步补全）
+function upsertThinkingStep(step) {
+  if (!step || step.seq == null) return
+  const idx = ensureStreamingMessage()
+  const list = messages.value[idx].thinking
+  const existed = list.find(item => item.seq === step.seq)
+  if (existed) {
+    existed.type = step.type
+    existed.label = step.label
+    existed.text = step.text
+  } else {
+    list.push({ seq: step.seq, type: step.type, label: step.label, text: step.text })
+  }
+  connectionStatus.value = 'streaming'
 }
 
 function scrollToBottom() {
@@ -396,6 +448,9 @@ function discardStreamingState() {
     deltaRafId = null
   }
   pendingDelta = ''
+  if (currentStreamingIndex >= 0 && messages.value[currentStreamingIndex]) {
+    messages.value[currentStreamingIndex].streaming = false
+  }
   currentStreamingIndex = -1
 }
 
@@ -413,6 +468,9 @@ function finishStreaming() {
     deltaRafId = null
   }
   pendingDelta = ''
+  if (currentStreamingIndex >= 0 && messages.value[currentStreamingIndex]) {
+    messages.value[currentStreamingIndex].streaming = false
+  }
   currentStreamingIndex = -1
   connectionStatus.value = 'disconnected'
   currentRequestId = ''
@@ -433,8 +491,9 @@ function cancelCurrentGeneration() {
 // 点击"停止"：先本地收尾保证界面立刻退出生成态，再通知服务端中断
 function stopGeneration() {
   flushDeltaSync()
-  if (currentStreamingIndex >= 0) {
+  if (currentStreamingIndex >= 0 && messages.value[currentStreamingIndex]) {
     messages.value[currentStreamingIndex].cancelled = true
+    messages.value[currentStreamingIndex].streaming = false
   }
   closeEventSource()
   connectionStatus.value = 'disconnected'
@@ -479,14 +538,11 @@ function sendMessage() {
     console.log('SSE 连接已打开')
   }
 
-  // delta：模型增量文本，按 rAF 批量追加到当前 AI 消息，既实时又避免逐字重排
+  // delta：结论正文增量，按 rAF 批量追加到当前 AI 消息，既实时又避免逐字重排
   eventSource.addEventListener('delta', (event) => {
     const data = event.data
     if (!data) return
-    if (currentStreamingIndex < 0) {
-      messages.value.push({ content: '', isUser: false, time: Date.now() })
-      currentStreamingIndex = messages.value.length - 1
-    }
+    ensureStreamingMessage()
     pendingDelta += data
     connectionStatus.value = 'streaming'
     if (!deltaRafId) {
@@ -494,35 +550,45 @@ function sendMessage() {
     }
   })
 
-  // done：本轮完整回答，替换增量缓冲确保 markdown 渲染完整正确
+  // thinking：思考步骤（工具调用 / 检索 / 推理），JSON，按 seq 幂等覆盖
+  eventSource.addEventListener('thinking', (event) => {
+    upsertThinkingStep(parseJson(event.data))
+  })
+
+  // cards：本轮关联的游记 / 攻略卡片，JSON 数组；后端未检索到相关游记时不发此事件
+  eventSource.addEventListener('cards', (event) => {
+    const cards = parseJson(event.data)
+    if (!Array.isArray(cards) || cards.length === 0) return
+    const idx = ensureStreamingMessage()
+    messages.value[idx].cards = cards
+  })
+
+  // done：本轮完整结果，JSON { content, cards, thinking }；解析失败按旧协议纯文本兜底
   eventSource.addEventListener('done', (event) => {
     flushDeltaSync()
-    const full = event.data
-    if (currentStreamingIndex >= 0) {
-      messages.value[currentStreamingIndex].content = (full && full.trim()) ? full : messages.value[currentStreamingIndex].content
-    } else if (full && full.trim()) {
-      addMessage(full, false)
+    const payload = parseJson(event.data)
+    if (payload && typeof payload.content === 'string') {
+      const idx = ensureStreamingMessage()
+      messages.value[idx].content = payload.content.trim() || messages.value[idx].content
+      if (Array.isArray(payload.cards)) messages.value[idx].cards = payload.cards
+    } else if (event.data && event.data.trim()) {
+      const idx = ensureStreamingMessage()
+      messages.value[idx].content = event.data
     }
     finishStreaming()
   })
 
-  // cancelled：本次生成被取消（用户停止 / 连接断开 / 新流挤占），data 为已生成部分
+  // cancelled：本次生成被取消（用户停止 / 连接断开 / 新流挤占），同样为 JSON
   eventSource.addEventListener('cancelled', (event) => {
     flushDeltaSync()
-    const partial = event.data
-    if (currentStreamingIndex >= 0) {
-      if (partial && partial.trim()) {
-        messages.value[currentStreamingIndex].content = partial
-      }
-      messages.value[currentStreamingIndex].cancelled = true
-    } else if (partial && partial.trim()) {
-      messages.value.push({
-        content: partial,
-        isUser: false,
-        time: Date.now(),
-        cancelled: true
-      })
+    const payload = parseJson(event.data)
+    const partial = payload && typeof payload.content === 'string' ? payload.content : event.data
+    const idx = ensureStreamingMessage()
+    if (partial && partial.trim()) {
+      messages.value[idx].content = partial
     }
+    if (Array.isArray(payload && payload.cards)) messages.value[idx].cards = payload.cards
+    messages.value[idx].cancelled = true
     finishStreaming()
   })
 
