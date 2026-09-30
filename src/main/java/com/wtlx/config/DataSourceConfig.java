@@ -82,7 +82,7 @@ public class DataSourceConfig {
      */
     @Bean
     public PgVectorStore pgVectorStore(@Qualifier("aiJdbcTemplate") JdbcTemplate aiJdbcTemplate,
-                                       EmbeddingModel embeddingModel,
+                                       @Qualifier("dashscopeEmbeddingModel") EmbeddingModel embeddingModel,
                                        PgVectorStoreProperties properties) {
         return PgVectorStore.builder(aiJdbcTemplate, embeddingModel)
                 .initializeSchema(properties.isInitializeSchema())

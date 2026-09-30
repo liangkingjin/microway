@@ -248,6 +248,10 @@ public class TripAgentServiceImpl implements TripAgentService {
                 finishLatch.await(SSE_TIMEOUT, TimeUnit.MILLISECONDS);
                 router.finish();
 
+                // 兜底：模型把完整方案写进了 <thinking> 块时，正文只剩终止标记，
+                // 此时把推理全文降级为正文，保证用户看得到内容而不是一个空气泡
+                degradeToReasoningIfBlank(answer, router, emitter);
+
                 TripAnswerVO payload = TripAnswerVO.builder()
                         .content(answer.toString())
                         .cards(cards)
@@ -323,6 +327,48 @@ public class TripAgentServiceImpl implements TripAgentService {
             log.warn("会话级检索失败，本次不展示卡片: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * 正文缺失时降级为推理文本。
+     * <p>
+     * 触发条件：正文去掉空白与终止标记后为空，而本轮推理文本非空。
+     * 说明模型把整份方案写进了 {@code <thinking>} 块（提示词已约束，但模型偶发不遵守），
+     * 与其给用户一个空气泡，不如把推理内容当作正文递出去。
+     *
+     * @param answer 正文缓冲区，命中降级时被改写
+     * @param router 分流器，提供推理全文
+     * @param emitter SSE 通道，用于补发一次 delta
+     */
+    private void degradeToReasoningIfBlank(StringBuilder answer, StreamEventRouter router, SseEmitter emitter) {
+        if (!isEffectivelyBlank(answer.toString())) {
+            return;
+        }
+        String reasoning = router.reasoningSnapshot();
+        if (isEffectivelyBlank(reasoning)) {
+            return;
+        }
+        log.warn("本轮正文为空，疑似模型将方案写入 <thinking> 块，降级使用推理文本（{} 字）", reasoning.length());
+        answer.setLength(0);
+        answer.append(reasoning);
+        send(emitter, "delta", reasoning);
+    }
+
+    /**
+     * 判断文本在"去掉空白与终止标记后"是否为空。
+     *
+     * @param text 待判定文本
+     * @return true 表示没有实际内容
+     */
+    private boolean isEffectivelyBlank(String text) {
+        if (text == null) {
+            return true;
+        }
+        return text.replace("【任务完成】", "")
+                .replace("【任务终止】", "")
+                .replace("【任务失败】", "")
+                .replaceAll("\\s+", "")
+                .isBlank();
     }
 
     private TripAnswerVO buildPayload(String content, List<ThinkingStepVO> steps, List<TripCardVO> cards) {

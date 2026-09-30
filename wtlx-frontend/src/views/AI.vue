@@ -398,18 +398,21 @@ function ensureStreamingMessage() {
   return currentStreamingIndex
 }
 
-// 按 seq 幂等写入思考步骤：同序号为"更新该步骤"（工具参数逐步补全）
+// 按 seq 幂等写入思考步骤：同序号为"更新该步骤"（工具参数逐步补全）。
+// append=true 表示后端只发了新增文本，需追加到同序号步骤末尾（推理文本逐字到达，
+// 若每次都发全量，传输量会随帧数平方增长）。
 function upsertThinkingStep(step) {
   if (!step || step.seq == null) return
   const idx = ensureStreamingMessage()
   const list = messages.value[idx].thinking
   const existed = list.find(item => item.seq === step.seq)
+  const text = step.text || ''
   if (existed) {
     existed.type = step.type
     existed.label = step.label
-    existed.text = step.text
+    existed.text = step.append ? (existed.text || '') + text : text
   } else {
-    list.push({ seq: step.seq, type: step.type, label: step.label, text: step.text })
+    list.push({ seq: step.seq, type: step.type, label: step.label, text })
   }
   connectionStatus.value = 'streaming'
 }

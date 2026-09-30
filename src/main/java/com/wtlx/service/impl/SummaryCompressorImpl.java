@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.SystemPromptTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -41,7 +42,9 @@ public class SummaryCompressorImpl implements SummaryCompressor {
             要求：严格≤{maxChars}字符；仅一行。
             """;
 
+    // 摘要压缩与主对话共用同一个模型实例（OpenAI 协议接入的百炼兼容模式端点）
     @Resource
+    @Qualifier("openAiChatModel")
     private ChatModel chatModel;
 
     @Override

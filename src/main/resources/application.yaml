@@ -15,11 +15,17 @@ spring:
     password: 1234
   # ==================== AI 能力（原 TripAgent 收口） ====================
   ai:
-    dashscope:
+    # ---- 对话模型：走阿里云百炼「OpenAI 兼容模式」，支持 qwen3.x / deepseek-v4 新模型 ----
+    openai:
       api-key: ${DASHSCOPE_API_KEY}
+      # 阿里云百炼兼容模式根地址，客户端会自动拼 /v1/chat/completions
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
       chat:
         options:
-          model: qwen3.7-flash-2026-07-15
+          model: qwen3.7-flash
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      # DashScope 客户端仅用于 Embedding（text-embedding-v3 在旧版 REST 路径下正常可用）
       embedding:
         options:
           # text-embedding-v3 向量维度为 1024，需与 pgvector.dimensions 保持一致

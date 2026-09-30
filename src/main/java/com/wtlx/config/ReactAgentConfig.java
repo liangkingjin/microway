@@ -7,6 +7,7 @@ import com.wtlx.advisor.ConversationMemoryInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,14 +31,14 @@ public class ReactAgentConfig {
     /**
      * 创建 ReactAgent Bean
      *
-     * @param dashscopeChatModel DashScope 聊天模型
-     * @param allTools           所有工具（本地 + MCP）
-     * @param memoryInterceptor  对话记忆拦截器（Spring Bean，内部通过 @Resource 注入记忆服务）
+     * @param chatModel         对话模型（OpenAI 协议接入的阿里云百炼兼容模式端点）
+     * @param allTools          所有工具（本地 + MCP）
+     * @param memoryInterceptor 对话记忆拦截器（Spring Bean，内部通过 @Resource 注入记忆服务）
      * @return ReactAgent 实例
      */
     @Bean
     public ReactAgent tripReactAgent(
-            ChatModel dashscopeChatModel,
+            @Qualifier("openAiChatModel") ChatModel chatModel,
             ToolCallback[] allTools,
             ConversationMemoryInterceptor memoryInterceptor) {
 
@@ -48,7 +49,7 @@ public class ReactAgentConfig {
 
         return ReactAgent.builder()
                 .name("TripPlannerReactAgent")
-                .model(dashscopeChatModel)
+                .model(chatModel)
                 .tools(allTools)
                 .instruction(instruction)
                 .saver(new MemorySaver())

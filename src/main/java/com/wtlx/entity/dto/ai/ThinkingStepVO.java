@@ -41,4 +41,10 @@ public class ThinkingStepVO implements Serializable {
      * 步骤正文，可能是工具入参、检索结果摘要或推理文本
      */
     private String text;
+
+    /**
+     * true 表示本次 text 是"增量"，前端需追加到同序号步骤末尾；
+     * false 表示覆盖。推理步骤内容长且逐字到达，用增量下发避免重复传输全量文本。
+     */
+    private Boolean append;
 }

@@ -74,6 +74,12 @@ public class StreamEventRouter {
 
     private final StringBuilder openReasoningText = new StringBuilder();
 
+    /**
+     * 本轮累积的推理全文。与 {@link #openReasoningText} 的区别：
+     * 后者随步骤闭合清空，这里只增不减，供"正文缺失时降级"取用。
+     */
+    private final StringBuilder reasoningFull = new StringBuilder();
+
     public StreamEventRouter(StreamSink sink) {
         this.sink = sink;
     }
@@ -188,6 +194,10 @@ public class StreamEventRouter {
         }
     }
 
+    /**
+     * 新建推理步骤时下发"建立"事件，之后每次只下发新增文本（append=true）。
+     * 推理内容往往上千字，若每帧都发全量，传输量会随帧数平方增长。
+     */
     private void appendReasoning(String text) {
         if (openReasoningStep == null) {
             seq++;
@@ -196,12 +206,29 @@ public class StreamEventRouter {
                     .type("reasoning")
                     .label("推理")
                     .text("")
+                    .append(false)
                     .build();
             openReasoningText.setLength(0);
+            sink.onThinking(openReasoningStep);
         }
         openReasoningText.append(text);
-        openReasoningStep.setText(abbreviate(openReasoningText.toString()));
-        sink.onThinking(openReasoningStep);
+        reasoningFull.append(text);
+        sink.onThinking(ThinkingStepVO.builder()
+                .seq(seq)
+                .type("reasoning")
+                .label("推理")
+                .text(text)
+                .append(true)
+                .build());
+    }
+
+    /**
+     * 本轮累积的推理全文（未被截断、不随步骤闭合清空），供调用方在正文缺失时降级使用
+     *
+     * @return 推理全文，无推理时为空串
+     */
+    public String reasoningSnapshot() {
+        return reasoningFull.toString();
     }
 
     private void closeReasoning() {
