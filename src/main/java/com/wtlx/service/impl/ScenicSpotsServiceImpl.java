@@ -1,9 +1,9 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.dto.ScenicSpotQuery;
-import com.wtlx.entity.ScenicSpots;
-import com.wtlx.mapper.ScenicSpotsMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.dto.ScenicSpotQuery;
+import com.wtlx.domain.entity.ScenicSpots;
+import com.wtlx.repository.mapper.ScenicSpotsMapper;
 import com.wtlx.service.IScenicSpotsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

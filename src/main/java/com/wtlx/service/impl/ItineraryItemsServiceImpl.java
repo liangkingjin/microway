@@ -1,8 +1,8 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.ItineraryItems;
-import com.wtlx.mapper.ItineraryItemsMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.ItineraryItems;
+import com.wtlx.repository.mapper.ItineraryItemsMapper;
 import com.wtlx.service.IItineraryItemsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

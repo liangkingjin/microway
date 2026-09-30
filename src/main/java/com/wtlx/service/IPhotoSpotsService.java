@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.PhotoSpots;
+import com.wtlx.domain.entity.PhotoSpots;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 

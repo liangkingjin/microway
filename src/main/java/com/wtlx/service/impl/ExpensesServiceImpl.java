@@ -1,9 +1,9 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.Expenses;
-import com.wtlx.entity.TravelPlans;
-import com.wtlx.mapper.ExpensesMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.Expenses;
+import com.wtlx.domain.entity.TravelPlans;
+import com.wtlx.repository.mapper.ExpensesMapper;
 import com.wtlx.service.IExpensesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.service.ITravelPlansService;

@@ -1,8 +1,8 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.dto.TeamJoinRequest;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.dto.TeamJoinRequest;
 import com.wtlx.service.ITeamMembersService;
 import com.wtlx.utils.UserHolder;
 import io.swagger.annotations.Api;

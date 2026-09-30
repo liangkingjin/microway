@@ -1,8 +1,8 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.Provinces;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.Provinces;
 import com.wtlx.service.IProvincesService;
 import io.swagger.annotations.Api;
 import org.springframework.beans.factory.annotation.Autowired;

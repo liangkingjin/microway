@@ -1,8 +1,8 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.Videos;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.Videos;
 import com.wtlx.service.IVideosService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;

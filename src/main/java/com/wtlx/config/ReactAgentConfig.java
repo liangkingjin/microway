@@ -3,7 +3,7 @@ package com.wtlx.config;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.modelcalllimit.ModelCallLimitHook;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
-import com.wtlx.advisor.ConversationMemoryInterceptor;
+import com.wtlx.infrastructure.advisor.ConversationMemoryInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;

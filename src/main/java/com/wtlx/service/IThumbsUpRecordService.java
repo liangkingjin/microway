@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.ThumbsUpRecord;
+import com.wtlx.domain.entity.ThumbsUpRecord;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 /**

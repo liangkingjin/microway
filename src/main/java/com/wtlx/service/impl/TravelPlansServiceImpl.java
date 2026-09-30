@@ -1,15 +1,15 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.Expenses;
-import com.wtlx.entity.ItineraryItems;
-import com.wtlx.entity.LuggageItems;
-import com.wtlx.entity.TravelPlans;
-import com.wtlx.mapper.ExpensesMapper;
-import com.wtlx.mapper.ItineraryItemsMapper;
-import com.wtlx.mapper.LuggageItemsMapper;
-import com.wtlx.mapper.TravelPlansMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.Expenses;
+import com.wtlx.domain.entity.ItineraryItems;
+import com.wtlx.domain.entity.LuggageItems;
+import com.wtlx.domain.entity.TravelPlans;
+import com.wtlx.repository.mapper.ExpensesMapper;
+import com.wtlx.repository.mapper.ItineraryItemsMapper;
+import com.wtlx.repository.mapper.LuggageItemsMapper;
+import com.wtlx.repository.mapper.TravelPlansMapper;
 import com.wtlx.service.ITravelPlansService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.utils.UserHolder;

@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.TbHotelComment;
-import com.wtlx.mapper.TbHotelCommentMapper;
+import com.wtlx.domain.entity.TbHotelComment;
+import com.wtlx.repository.mapper.TbHotelCommentMapper;
 import com.wtlx.service.ITbHotelCommentService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

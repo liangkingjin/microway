@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.Provinces;
-import com.wtlx.mapper.ProvincesMapper;
+import com.wtlx.domain.entity.Provinces;
+import com.wtlx.repository.mapper.ProvincesMapper;
 import com.wtlx.service.IProvincesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

@@ -1,6 +1,6 @@
 package com.wtlx.interceptor;
 
-import com.wtlx.entity.dto.UserDTO;
+import com.wtlx.domain.entity.dto.UserDTO;
 import com.wtlx.utils.UserHolder;
 import org.springframework.web.servlet.HandlerInterceptor;
 

@@ -1,12 +1,12 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.TbHotelOrder;
-import com.wtlx.entity.TbHotelRoom;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.TbHotelOrder;
+import com.wtlx.domain.entity.TbHotelRoom;
 import com.wtlx.service.ITbHotelOrderService;
 import com.wtlx.service.ITbHotelRoomService;
-import com.wtlx.entity.vo.HotelOrderDetailVO;
+import com.wtlx.domain.entity.vo.HotelOrderDetailVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.BeanUtils;

@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.Guides;
-import com.wtlx.mapper.GuidesMapper;
+import com.wtlx.domain.entity.Guides;
+import com.wtlx.repository.mapper.GuidesMapper;
 import com.wtlx.service.IGuidesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

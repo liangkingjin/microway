@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.SelfDriveGuides;
-import com.wtlx.mapper.SelfDriveGuidesMapper;
+import com.wtlx.domain.entity.SelfDriveGuides;
+import com.wtlx.repository.mapper.SelfDriveGuidesMapper;
 import com.wtlx.service.ISelfDriveGuidesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

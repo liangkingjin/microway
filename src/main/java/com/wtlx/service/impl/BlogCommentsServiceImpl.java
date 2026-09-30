@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.BlogComments;
-import com.wtlx.mapper.BlogCommentsMapper;
+import com.wtlx.domain.entity.BlogComments;
+import com.wtlx.repository.mapper.BlogCommentsMapper;
 import com.wtlx.service.IBlogCommentsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

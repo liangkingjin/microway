@@ -85,7 +85,7 @@ ai:
     password: 123456
 
 mybatis-plus:
-  type-aliases-package: com.wtlx.entity
+  type-aliases-package: com.wtlx.domain.entity
 
 # ==================== AI 对话记忆配置 ====================
 trip-agent:

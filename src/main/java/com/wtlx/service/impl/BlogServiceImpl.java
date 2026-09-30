@@ -4,14 +4,14 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.dto.ScrollResult;
-import com.wtlx.entity.dto.UserDTO;
-import com.wtlx.entity.Blog;
-import com.wtlx.entity.Follow;
-import com.wtlx.entity.TbBlogComments;
-import com.wtlx.entity.User;
-import com.wtlx.mapper.BlogMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.dto.ScrollResult;
+import com.wtlx.domain.entity.dto.UserDTO;
+import com.wtlx.domain.entity.Blog;
+import com.wtlx.domain.entity.Follow;
+import com.wtlx.domain.entity.TbBlogComments;
+import com.wtlx.domain.entity.User;
+import com.wtlx.repository.mapper.BlogMapper;
 import com.wtlx.service.IBlogService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.service.ILikedService;
@@ -21,16 +21,13 @@ import com.wtlx.service.IUserService;
 import com.wtlx.utils.RedisConstants;
 import com.wtlx.utils.SystemConstants;
 import com.wtlx.utils.UserHolder;
-import com.wtlx.utils.RabbitMQConstants;
-import com.wtlx.mq.RagDocIndexMessage;
-import com.wtlx.constant.RagDocType;
+import com.wtlx.infrastructure.mq.message.RagDocIndexMessage;
+import com.wtlx.infrastructure.mq.producer.RagDocIndexProducer;
+import com.wtlx.infrastructure.rag.RagDocType;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
@@ -54,7 +51,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
     @Resource
     private ILikedService likedService;
     @Resource
-    private RabbitTemplate rabbitTemplate;
+    private RagDocIndexProducer ragDocIndexProducer;
     /**
      * 根据id查询博客
      * @param id
@@ -167,39 +164,8 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         }
         //5.返回id
         // 5. 返回 id（RAG 向量索引改由 MQ 异步处理，不阻塞发布流程）
-        publishRagEvent(new RagDocIndexMessage("PUBLISHED", RagDocType.BLOG, blog.getId()));
+        ragDocIndexProducer.sendAfterCommit(new RagDocIndexMessage("PUBLISHED", RagDocType.BLOG, blog.getId()));
         return Result.ok(blog.getId());
-    }
-
-    /**
-     * 投递 RAG 索引事件。
-     * <p>
-     * 在事务提交后才发送，避免"消息已发出但事务回滚"导致向量库出现不存在的来源；
-     * 当前没有事务时直接发送。发送失败只记日志，不影响发布主流程（可由管理接口补偿）。
-     *
-     * @param message 索引消息
-     */
-    private void publishRagEvent(RagDocIndexMessage message) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    sendRagEvent(message);
-                }
-            });
-            return;
-        }
-        sendRagEvent(message);
-    }
-
-    private void sendRagEvent(RagDocIndexMessage message) {
-        try {
-            rabbitTemplate.convertAndSend(RabbitMQConstants.RAG_DOC_EXCHANGE,
-                    RabbitMQConstants.RAG_DOC_ROUTING_KEY, message);
-        } catch (Exception e) {
-            log.error("RAG 索引事件发送失败, docType: {}, sourceId: {}, 可通过 /ai/rag/reindex 补偿",
-                    message.getDocType(), message.getSourceId(), e);
-        }
     }
 
     /**
@@ -290,7 +256,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         boolean removed = removeById(id);
         if (removed) {
             // 同步清理该游记在向量库中的切片，避免已删除内容仍被检索到
-            publishRagEvent(new RagDocIndexMessage("DELETED", RagDocType.BLOG, id));
+        ragDocIndexProducer.sendAfterCommit(new RagDocIndexMessage("DELETED", RagDocType.BLOG, id));
             return Result.ok("删除成功");
         } else {
             return Result.fail("删除失败");

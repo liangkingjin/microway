@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.SelfDriveGuides;
+import com.wtlx.domain.entity.SelfDriveGuides;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 /**

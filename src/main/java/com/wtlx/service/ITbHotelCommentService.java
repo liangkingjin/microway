@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.TbHotelComment;
+import com.wtlx.domain.entity.TbHotelComment;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 /**

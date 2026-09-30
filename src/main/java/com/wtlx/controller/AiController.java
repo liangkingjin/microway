@@ -1,9 +1,9 @@
 package com.wtlx.controller;
 
-import com.wtlx.cancel.GenerationCancelService;
-import com.wtlx.entity.conversation.enums.MessageRole;
-import com.wtlx.service.ConversationMemoryService;
-import com.wtlx.service.TripAgentService;
+import com.wtlx.infrastructure.cancel.GenerationCancelService;
+import com.wtlx.domain.entity.conversation.enums.MessageRole;
+import com.wtlx.application.conversation.ConversationMemoryService;
+import com.wtlx.application.trip.TripAgentService;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,8 +20,6 @@ import java.util.UUID;
 
 /**
  * 旅游规划智能体接口（新链路）
- * <p>
- * 基于 SpringAI Alibaba ReactAgent，老链路接口已归档至 {@link LegacyTripApi}。
  */
 @RestController
 @RequestMapping("/ai")
