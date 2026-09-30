@@ -306,6 +306,30 @@ public class RagDocIndexMessage implements Serializable {
 |---|---|---|
 | A | 正文/思考分离方式 | **A1 标记分流 + 兜底**：`<thinking>` 块内为思考，块外为正文；整轮无标记时全部归正文 |
 | B | 旧静态 Markdown 知识 | **B1 移除**：删除 `TripDocumentLoader`、`TripKnowledgeInitializer` 与 `document/*.md` |
-| C | 卡片来源 | **C1 后端独立检索**：用用户 query 直接检索，不依赖模型输出 id |
+| C | 卡片来源 | **C1 后端独立检索** → 已由 **C2 模型检索驱动** 修订，见下 |
 | D | 文件生成类工具 | **D2 两者都删**：`PDFGenerationTool` / `MarkdownGenerationTool` 下线，iText 依赖一并移除 |
 | E | 历史消息是否持久化思考与卡片 | **E1 只存正文**：`conversation_message` 结构不变，历史回放时思考与卡片为空集合 |
+
+### C 的修订：C1 → C2 模型检索驱动
+
+**C1（初版）**：卡片由后端按用户原话做一次独立检索，不依赖模型输出 id。
+
+**C2（现行）**：卡片改由 `RagRetrievalTool` 在一次宽召回中与模型上下文**同源产出**——工具用模型改写后的查询词检索
+`candidate-top-k` 条，其中前 `search-top-k` 条留给模型当上下文，得分 `>= card-threshold` 的前 `card-top-k` 条
+经 `RagCardAssembler` 组装后写入 `CardSink` 推给前端。
+
+修订理由：
+
+1. **召回更准**。C1 用用户原话检索，多轮追问（如"那住宿呢"）缺主题词，会命中大量只共享泛词的无关来源；
+   模型改写后的查询词自带对话上下文。
+2. **省一半检索成本**。C1 下每轮要检索两次（原话一次、工具一次）并做两次 embedding，C2 合并为一次。
+3. **阈值只剩一套标定量**。C1 的卡片阈值与工具阈值分属两条链路，换 embedding 模型时要分别标定。
+
+代价与边界：**卡片产出绑定模型调用率**——模型整轮未调用检索工具时没有卡片（寒暄类问题本就不应有卡片）。
+若实测产出率不达标，可再把 C1 以"仅随 `done` 兜底、不提前广播"的形式加回。
+
+实现要点：卡片出口（`CardSink`）挂在 `RunnableConfig` 的 metadata 上随请求下发给工具，
+工具用 `ToolContextHelper.getConfig(ToolContext)` 取回——**不要改用全局注册表按 `conversationId` 寻址**，
+出口随请求走就不需要注册/注销的生命周期管理。
+
+前端协议不变：`cards` 事件仍是全量覆盖语义，未命中则完全不发该事件。

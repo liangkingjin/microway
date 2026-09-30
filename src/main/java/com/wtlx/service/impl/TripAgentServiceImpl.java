@@ -10,14 +10,10 @@ import com.wtlx.infrastructure.cancel.GenerationCancelledException;
 import com.wtlx.infrastructure.cancel.GenerationHandle;
 import com.wtlx.infrastructure.cancel.GenerationRegistry;
 import com.wtlx.config.ConversationContextHolder;
-import com.wtlx.infrastructure.rag.RagDocType;
 import com.wtlx.domain.entity.dto.ai.ThinkingStepVO;
 import com.wtlx.domain.entity.dto.ai.TripAnswerVO;
 import com.wtlx.domain.entity.dto.ai.TripCardVO;
-import com.wtlx.infrastructure.rag.generation.RagCardAssembler;
-import com.wtlx.infrastructure.rag.retriever.RagHit;
-import com.wtlx.infrastructure.rag.config.RagProperties;
-import com.wtlx.infrastructure.rag.retriever.RagSearchService;
+import com.wtlx.infrastructure.rag.generation.CardSink;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
 import jakarta.annotation.PreDestroy;
@@ -49,7 +45,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * <ul>
  *     <li>{@code event: thinking} — 思考步骤（工具调用 / 检索 / 推理），JSON，按 seq 幂等覆盖</li>
  *     <li>{@code event: delta}    — 结论正文增量，边生成边推送</li>
- *     <li>{@code event: cards}    — 关联游记卡片，JSON 数组；未检索到则不发</li>
+ *     <li>{@code event: cards}    — 关联游记 / 攻略卡片，JSON 数组；由 RAG 工具检索产出，
+ *                                   工具未被调用或未命中则不发。发的是全量集合，覆盖语义</li>
  *     <li>{@code event: done}     — 正常结束，JSON，携带 content / cards / thinking</li>
  *     <li>{@code event: cancelled}— 被取消（用户停止 / 断开 / 新流挤占），JSON，携带已生成部分</li>
  *     <li>{@code event: error}    — 异常信息</li>
@@ -95,15 +92,6 @@ public class TripAgentServiceImpl implements TripAgentService {
 
     @Resource
     private ObjectMapper objectMapper;
-
-    @Resource
-    private RagProperties ragProperties;
-
-    @Resource
-    private RagSearchService ragSearchService;
-
-    @Resource
-    private RagCardAssembler ragCardAssembler;
 
     /**
      * 心跳调度线程池（全实例共享）
@@ -163,8 +151,11 @@ public class TripAgentServiceImpl implements TripAgentService {
             StringBuilder answer = new StringBuilder();
             List<ThinkingStepVO> steps = new ArrayList<>();
             Map<Integer, ThinkingStepVO> stepIndex = new HashMap<>();
-            AtomicReference<List<TripCardVO>> cardsRef = new AtomicReference<>(List.of());
             AtomicReference<SignalType> signalRef = new AtomicReference<>();
+            // 卡片出口：RAG 工具执行在 Reactor 线程上够不到本请求的 SseEmitter，
+            // 故把出口挂到 RunnableConfig 的 metadata 上随请求下发给工具。
+            // 回调收到的是去重后的全量集合，cards 事件是覆盖语义，重复发送即幂等更新
+            CardSink cardSink = new CardSink(full -> sendJson(emitter, "cards", full));
             try {
                 ConversationContextHolder.setConversationId(conversationId);
 
@@ -172,6 +163,7 @@ public class TripAgentServiceImpl implements TripAgentService {
                         .threadId(threadId)
                         // 流式执行跑在 Reactor 线程，ThreadLocal 传不过去，故同时放进元数据
                         .addMetadata(ConversationMemoryInterceptor.CONVERSATION_ID_KEY, conversationId)
+                        .addMetadata(CardSink.METADATA_KEY, cardSink)
                         .build();
 
                 StreamEventRouter router = new StreamEventRouter(new StreamEventRouter.StreamSink() {
@@ -197,10 +189,6 @@ public class TripAgentServiceImpl implements TripAgentService {
                         }
                     }
                 });
-
-                // 会话级检索：命中站内内容才产出卡片，未命中则不发 cards 事件
-                List<TripCardVO> cards = resolveCards(message, router, emitter);
-                cardsRef.set(cards);
 
                 CountDownLatch finishLatch = new CountDownLatch(1);
                 long[] lastCheckAt = {System.currentTimeMillis()};
@@ -255,7 +243,8 @@ public class TripAgentServiceImpl implements TripAgentService {
 
                 TripAnswerVO payload = TripAnswerVO.builder()
                         .content(answer.toString())
-                        .cards(cards)
+                        // 取卡片出口的合并全集：工具侧检索产出的卡片随 done / cancelled 返回并落库
+                        .cards(cardSink.snapshot())
                         .thinking(steps)
                         .build();
 
@@ -275,11 +264,11 @@ public class TripAgentServiceImpl implements TripAgentService {
             } catch (GenerationCancelledException e) {
                 log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字",
                         threadId, requestId, answer.length());
-                sendJson(emitter, "cancelled", buildPayload(answer.toString(), steps, cardsRef.get()));
+                sendJson(emitter, "cancelled", buildPayload(answer.toString(), steps, cardSink.snapshot()));
             } catch (Exception e) {
                 if (cancelled.get()) {
                     log.info("生成已取消（客户端断开）, requestId: {}, 已生成 {} 字", requestId, answer.length());
-                    sendJson(emitter, "cancelled", buildPayload(answer.toString(), steps, cardsRef.get()));
+                    sendJson(emitter, "cancelled", buildPayload(answer.toString(), steps, cardSink.snapshot()));
                 } else {
                     log.error("ReactAgent 调用失败, threadId: {}, requestId: {}", threadId, requestId, e);
                     send(emitter, "error", "Agent 执行错误: " + e.getMessage());
@@ -288,7 +277,7 @@ public class TripAgentServiceImpl implements TripAgentService {
                 if (!answer.isEmpty()) {
                     // 卡片随正文一起落库，重新进入会话时才能恢复"正文 + 游记卡片"的展示
                     memoryService.appendAndCompressIfNeeded(
-                            conversationId, message, answer.toString(), toJson(cardsRef.get()));
+                            conversationId, message, answer.toString(), toJson(cardSink.snapshot()));
                 }
                 ConversationContextHolder.clear();
                 generationRegistry.unregister(requestId);
@@ -299,33 +288,6 @@ public class TripAgentServiceImpl implements TripAgentService {
         });
 
         return emitter;
-    }
-
-    /**
-     * 解析本轮关联的游记卡片。
-     * <p>
-     * 由后端按用户原始问题做一次相似度检索（不依赖模型输出 id），命中则发 {@code cards} 事件；
-     * 未命中则返回空集合，前端据此不渲染卡片区。检索异常向上传播，由调用方统一收口。
-     *
-     * @param message 用户消息
-     * @param router  分流器，用于记录"检索站内游记"这一思考步骤
-     * @param emitter SSE 通道，用于推送 cards 事件
-     * @return 卡片列表，可能为 empty 但绝不为 null
-     */
-    private List<TripCardVO> resolveCards(String message, StreamEventRouter router, SseEmitter emitter) {
-        if (ragProperties == null || !ragProperties.isEnabled()) {
-            return List.of();
-        }
-        router.addStep("retrieval", "检索站内游记与攻略", message);
-        List<RagHit> hits = ragSearchService.search(message, ragProperties.getCardTopK(),
-                ragProperties.getCardThreshold(), List.of(RagDocType.BLOG, RagDocType.GUIDE));
-        List<TripCardVO> cards = ragCardAssembler.assemble(hits);
-        if (!cards.isEmpty()) {
-            sendJson(emitter, "cards", cards);
-        }
-        router.addStep("retrieval", "检索结果",
-                cards.isEmpty() ? "未命中相关内容" : "命中 " + cards.size() + " 条相关内容");
-        return cards;
     }
 
     /**

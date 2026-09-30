@@ -1,4 +1,4 @@
-package com.wtlx.cancel;
+package com.wtlx.infrastructure.cancel;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

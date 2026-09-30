@@ -40,14 +40,20 @@ public class RagProperties {
     private int embeddingBatchSize = 10;
 
     /**
-     * Agent 检索工具默认返回条数
+     * 给模型的检索上下文条数（宽召回结果的前 N 条）
      */
     private int searchTopK = 5;
 
     /**
-     * Agent 检索工具相似度阈值（0~1，越大越严）
+     * 检索相似度阈值（0~1，越大越严）；宽召回与给模型的上下文共用
      */
-    private double searchThreshold = 0.35;
+    private double searchThreshold = 0.5;
+
+    /**
+     * 宽召回条数：一次检索同时覆盖"给模型的上下文"与"卡片候选"，
+     * 必须不小于 search-top-k 与 card-top-k，否则卡片候选会被给模型的条数截断
+     */
+    private int candidateTopK = 8;
 
     /**
      * 前端卡片取用条数
@@ -55,9 +61,9 @@ public class RagProperties {
     private int cardTopK = 4;
 
     /**
-     * 卡片相似度阈值；低于该值认为"未检索到相关游记"，不渲染卡片区
+     * 卡片相似度阈值；卡片直接暴露给用户，比 search-threshold 更严，低于该值不产出卡片
      */
-    private double cardThreshold = 0.3;
+    private double cardThreshold = 0.55;
 
     /**
      * 启动时是否对缺失索引的来源做全量回填

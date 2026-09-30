@@ -120,7 +120,7 @@ GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, 免登录)
 | --- | --- | --- |
 | `thinking` | JSON `{seq,type,label,text,append}` | 同 `seq` 表示覆盖更新（幂等）；`type` ∈ `tool`/`retrieval`/`reasoning`/`node` |
 | `delta` | **裸文本**增量 | 非 JSON |
-| `cards` | JSON `TripCardVO[]` | **未命中就完全不发这个事件**，前端靠"事件缺席"判断；重发即全量覆盖 |
+| `cards` | JSON `TripCardVO[]` | 由 RAG 工具检索产出，**模型未调用工具或未命中就完全不发这个事件**，前端靠"事件缺席"判断；重发即全量覆盖 |
 | `done` | JSON `TripAnswerVO{content,cards,thinking}` | 正常结束 |
 | `cancelled` | 同 `done` 结构，内容为已生成的部分 | 用户停止 / 断开 / 被新流挤占 |
 | `error` | 裸文本 | 真实异常 |
@@ -131,7 +131,7 @@ GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, 免登录)
 
 ### ReactAgent 装配（`config/ReactAgentConfig.java`）
 
-`ReactAgent.builder()` → `.model(@Qualifier("openAiChatModel"))` + `.tools(allTools)` + `.instruction(prompts/trip-planner-system.st)` + `.saver(new MemorySaver())` + `.interceptors(ConversationMemoryInterceptor, RagToolCardInterceptor)` + `.hooks(ModelCallLimitHook.runLimit(20))`。
+`ReactAgent.builder()` → `.model(@Qualifier("openAiChatModel"))` + `.tools(allTools)` + `.instruction(prompts/trip-planner-system.st)` + `.saver(new MemorySaver())` + `.interceptors(ConversationMemoryInterceptor)` + `.hooks(ModelCallLimitHook.runLimit(20))`。
 
 **为什么对话走 OpenAI 兼容模式而不是 DashScope**：`spring-ai-alibaba-starter-dashscope` 1.1.2.x 硬编码旧版 REST 协议（`model`+`input`+`parameters`），qwen3.x / deepseek-v4 系列会直接 `InvalidParameter: url error`，只改 `completions-path` 也不行。所以对话模型改用 `spring-ai-starter-model-openai` 指向百炼兼容模式端点（`model: qwen3.7-flash`），而 **Embedding 仍留在 DashScope**（`text-embedding-v3` 在旧路径正常）。两个 starter 并存后 bean 必须显式消歧：`@Qualifier("openAiChatModel")` / `@Qualifier("dashscopeEmbeddingModel")`，命名规律 `openAi*` vs `dashscope*`。删掉任一 qualifier 或把对话模型换回 DashScope 都会直接起不来。
 
@@ -143,12 +143,12 @@ GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, 免登录)
 
 配置全在 `trip-agent.rag.*`（`RagProperties`）：chunkSize 500 / overlap 80 / maxChunks 50 / embeddingBatchSize 10。
 
-- **两条检索路径，阈值不同，不要混**：Agent 工具用 `search-top-k: 5` + `search-threshold: 0.5`；前端卡片用 `card-top-k: 4` + `card-threshold: 0.55`（卡片直接给用户看，更严）。阈值是按实测标定的（相关查询 0.62~0.78，无关查询 ≤0.47），**换 embedding 模型必须重新标定**。
+- **卡片由 RAG 工具产出，没有后端前置检索**：`retrieveKnowledge` 用模型改写后的查询词做一次宽召回（`candidate-top-k: 8` + `search-threshold: 0.5`），其中前 `search-top-k: 5` 条给模型当上下文、得分 `>= card-threshold: 0.55` 的前 `card-top-k: 4` 条组装成前端卡片——**一次检索两处产出，不重复花 embedding 与向量检索的钱**。之所以由模型改写词驱动卡片而非用户原话：多轮追问（"那住宿呢"）原话缺主题词，会命中大量只共享泛词的无关来源。阈值按实测标定（相关查询 0.62~0.78，无关查询 ≤0.47），**换 embedding 模型必须重新标定**。
 - **卡片只能来自向量库 metadata，绝不能来自模型输出**：`RagCardAssembler` 负责组装，模型只决定检索时机和改写查询词。这是"卡片不产生幻觉 id"的根本保证。
 - 切片：`ChineseTextSplitter`（手写中文递归切分，非 Spring AI 的 TokenTextSplitter）→ `RagDocumentFactory` 生成**确定性 UUID** 切片 id（`UUID.nameUUIDFromBytes("wtlx-rag:"+docType+":"+sourceId+":"+idx)`）→ 先按 id 删旧片再批量 embedding 入库。确定性 id + 先删后加就是幂等的全部依靠（PGVector 主键必须是 UUID，所以不能用业务 id）。`RagIndexServiceImpl` 用 `content_hash` 短路，内容没变直接跳过，不重复花 embedding 的钱。
 - **来源只有站内游记（BLOG）与官方攻略（GUIDE）**，旧的静态 Markdown 知识库已按设计文档决策 B1 移除。游记发布/删除通过 MQ 自动建索引；**攻略没有任何生产者**，只能靠 `/ai/rag/rebuild*` 手工回填。
 - 向量库表 `public.vector_store(id uuid, content, metadata json, embedding vector(1024))`，HNSW + COSINE_DISTANCE，`initialize-schema: true`，DDL 在 `db/schema-postgresql.sql`。索引台账在 **MySQL** 的 `rag_source_index`。
-- `infrastructure/rag/bridge/` 让"模型自主检索"和"后端前置检索"两条线汇入同一请求级卡片集合：`RagCardBridge` 按 `conversationId` 注册汇聚点、按 `sourceType:sourceId` 去重保留最高分、每次合并后**广播全量集合**（`cards` 事件是覆盖语义，发全量即幂等）；`RagToolCardInterceptor` 拦截 `RagRetrievalTool`，用模型改写后的查询词再检索一次并入桥。原因是工具跑在 Reactor 线程上够不到请求级的 `SseEmitter`，只能从 `ToolCallExecutionContext` 的 `RunnableConfig` 取 `conversationId`。
+- **卡片出口挂在 `RunnableConfig` 的 metadata 上，不要改回全局注册表**：RAG 工具执行在 Reactor 线程上够不到请求级 `SseEmitter`，所以 `TripAgentServiceImpl` 每轮 `new` 一个 `CardSink`（普通对象，非 Spring bean）放进 config metadata（键 `CardSink.METADATA_KEY`），工具用 `ToolContextHelper.getConfig(ToolContext)` 取回 config 再取出 sink——框架会给 `MethodToolCallback` 注入 `_AGENT_CONFIG_`，这条路是通的。`CardSink` 按 `sourceType:sourceId` 去重保留最高分，每次变化后**广播全量集合**（`cards` 是覆盖语义，发全量即幂等）。出口随请求走，就不需要按 `conversationId` 注册/注销的生命周期管理，并发会话天然隔离。注意它挂在 metadata 上依赖 `MemorySaver` 不做序列化，换成持久化 Saver 时必须改成传一个可序列化标识再反查。
 
 ### 取消机制（`infrastructure/cancel/`）
 

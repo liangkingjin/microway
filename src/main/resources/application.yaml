@@ -109,9 +109,13 @@ trip-agent:
     # 单批 embedding 条数（DashScope text-embedding 接口上限 10）
     embedding-batch-size: 10
     # Agent 检索工具参数（阈值偏松，保留召回，由模型判断相关性）
-    search-top-k: 5
     # 实测：相关查询 top5 落在 0.62~0.71，无关查询（如"帮我写一段Java代码"）最高 0.46
     search-threshold: 0.5
+    # 给模型的上下文条数
+    search-top-k: 5
+    # 宽召回条数：一次检索同时服务"给模型的上下文"与"卡片候选"，
+    # 必须不小于 search-top-k 与 card-top-k，否则卡片候选会被给模型的条数截断
+    candidate-top-k: 8
     # 前端卡片取用条数与阈值（低于阈值视为未命中，不渲染卡片区）
     # 卡片直接暴露给用户，阈值比检索更严：0.55 高于无关查询上限 0.46，低于相关查询下限 0.62
     card-top-k: 4
