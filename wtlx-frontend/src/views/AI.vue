@@ -63,8 +63,11 @@
                 <div class="avatar ai-avatar">AI</div>
                 <div class="message-body">
                   <ThinkingPanel :steps="msg.thinking || []" :streaming="!!msg.streaming" />
-                  <div v-if="msg.content" class="bubble ai-bubble" v-html="renderMarkdown(msg.content)"></div>
-                  <BlogCardGrid :cards="msg.cards || []" />
+                  <!-- v-html 会覆盖所在元素的子节点，正文必须单独一层，卡片才能与它同处一个气泡 -->
+                  <div v-if="msg.content || (msg.cards && msg.cards.length)" class="bubble ai-bubble">
+                    <div v-if="msg.content" class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
+                    <BlogCardGrid :cards="msg.cards || []" />
+                  </div>
                   <span class="timestamp">
                     {{ formatTime(msg.time) }}
                     <em v-if="msg.cancelled" class="cancelled-tag">已停止</em>
@@ -212,10 +215,14 @@ watch(inputMessage, () => {
   nextTick(() => adjustTextareaHeight())
 })
 
+// 模型偶尔会在正文里甩出一对空白代码围栏（裸的 ``` 换行 ```），渲染出来是一块
+// 没有任何内容的深色 <pre>，纯属噪音，渲染前先剔除
+const EMPTY_FENCE = /^[ \t]*```[^\S\n]*[^\n]*\n(?:[ \t]*\n)*[ \t]*```[ \t]*$/gm
+
 function renderMarkdown(text) {
   if (!text) return ''
+  let source = text.replace(EMPTY_FENCE, '')
   // 流式到达时代码块围栏可能尚未闭合，补一个收尾，避免其后内容被整段吞进 <pre>
-  let source = text
   const fences = (source.match(/^```/gm) || []).length
   if (fences % 2 === 1) {
     source += '\n```'
@@ -1270,6 +1277,10 @@ function toggleSidebar() {
   border-radius: 0;
   font-size: 0.9em;
 }
+/* 兜底：流式过程中围栏可能尚未闭合，会短暂渲染出空代码块——深色空块观感极差，直接不显示 */
+.bubble :deep(pre:has(> code:empty)) {
+  display: none;
+}
 .bubble :deep(table) {
   border-collapse: collapse;
   width: 100%;
@@ -1310,6 +1321,16 @@ function toggleSidebar() {
   /* 抽屉内标题栏避开状态栏 */
   .sidebar-header {
     padding-top: calc(16px + env(safe-area-inset-top));
+  }
+}
+
+/* 窄屏：气泡内边距收紧，把宽度让给正文与卡片 */
+@media (max-width: 480px) {
+  .bubble {
+    padding: 0.875rem 1rem;
+  }
+  .ai-bubble {
+    padding: 1rem 1.125rem;
   }
 }
 </style>

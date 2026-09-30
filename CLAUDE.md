@@ -171,7 +171,7 @@ Vue 3.5 + Vite 6 + Vue Router 4（**hash 模式**）+ Pinia + Element Plus，`<s
 - **`router/index.js` 里有一段 `if (import.meta.env.DEV) return true` 的临时放行**：`npm run dev` 时完全跳过登录校验，生产构建不受影响。预览完需要自行删除。
 - AI 会话列表**没有后端接口**，存在 localStorage 的 `ai_sessions` 里（并兼容迁移旧的单会话 `ai_chat_id`）。
 - 样式令牌在 `src/styles/variables.css`（`--wt-*`）+ `src/styles/common.css`（`.wt-page` / `.wt-card` / `.wt-tabs` 等），组件内不要再写死颜色/间距。页面专属样式一律收进 SFC `<style scoped>`（SPA 防串扰），覆盖 Element Plus 内部类用 `:deep()`。
-- AI 页的消息区由 `components/chat/ThinkingPanel.vue`（思考折叠面板）和 `components/chat/BlogCardGrid.vue`（卡片网格，空数组不渲染）组成。
+- AI 页的消息区由 `components/chat/ThinkingPanel.vue`（思考折叠面板）和 `components/chat/BlogCardGrid.vue`（参考来源横条，空数组不渲染）组成。**卡片挂在回答气泡内部**（与正文同处 `.bubble.ai-bubble`），靠一条细分隔线分区——因此正文必须单独放在 `.bubble-content` 里用 `v-html` 渲染，卡片作为兄弟节点，不能把 `v-html` 直接挂在气泡上（`v-html` 会覆盖子节点）。`renderMarkdown` 会在渲染前剔除模型偶发的空白代码围栏，否则 `pre` 的深色底会渲染成一块空黑块。
 
 ## 其他
 
