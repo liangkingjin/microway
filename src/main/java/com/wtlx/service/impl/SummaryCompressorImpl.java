@@ -1,7 +1,7 @@
-package com.wtlx.application.conversation;
+package com.wtlx.service.impl;
 
 import com.wtlx.domain.entity.conversation.ConversationMessage;
-import com.wtlx.application.conversation.SummaryCompressor;
+import com.wtlx.service.SummaryCompressor;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;

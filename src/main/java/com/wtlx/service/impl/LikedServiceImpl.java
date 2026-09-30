@@ -1,6 +1,5 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.domain.entity.ThumbsUpRecord;
 import com.wtlx.repository.mapper.BlogMapper;
 import com.wtlx.service.IThumbsUpRecordService;
 import com.wtlx.service.ILikedService;

@@ -1,12 +1,12 @@
-package com.wtlx.application.conversation;
+package com.wtlx.service.impl;
 
 import com.wtlx.domain.entity.conversation.ConversationMessage;
 import com.wtlx.domain.entity.conversation.ConversationSummary;
 import com.wtlx.domain.entity.conversation.enums.MessageRole;
 import com.wtlx.repository.mapper.ConversationMessageMapper;
 import com.wtlx.repository.mapper.ConversationSummaryMapper;
-import com.wtlx.application.conversation.ConversationMemoryService;
-import com.wtlx.application.conversation.SummaryCompressor;
+import com.wtlx.service.ConversationMemoryService;
+import com.wtlx.service.SummaryCompressor;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;

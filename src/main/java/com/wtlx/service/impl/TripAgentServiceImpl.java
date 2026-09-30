@@ -1,4 +1,4 @@
-package com.wtlx.application.trip;
+package com.wtlx.service.impl;
 
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
@@ -18,8 +18,8 @@ import com.wtlx.infrastructure.rag.generation.RagCardAssembler;
 import com.wtlx.infrastructure.rag.retriever.RagHit;
 import com.wtlx.infrastructure.rag.config.RagProperties;
 import com.wtlx.infrastructure.rag.retriever.RagSearchService;
-import com.wtlx.application.conversation.ConversationMemoryService;
-import com.wtlx.application.trip.TripAgentService;
+import com.wtlx.service.ConversationMemoryService;
+import com.wtlx.service.TripAgentService;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;

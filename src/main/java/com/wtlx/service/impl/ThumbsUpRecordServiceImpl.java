@@ -10,7 +10,6 @@ import com.wtlx.repository.mapper.BlogMapper;
 import com.wtlx.service.IThumbsUpRecordService;
 import com.wtlx.service.ITbBlogCommentsService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;

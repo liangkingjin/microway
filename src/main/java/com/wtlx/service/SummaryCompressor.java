@@ -1,4 +1,4 @@
-package com.wtlx.application.conversation;
+package com.wtlx.service;
 
 import com.wtlx.domain.entity.conversation.ConversationMessage;
 

@@ -1,4 +1,4 @@
-package com.wtlx.application.trip;
+package com.wtlx.service;
 
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
