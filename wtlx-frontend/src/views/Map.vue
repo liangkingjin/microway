@@ -49,6 +49,9 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
 import FootBar from '../components/FootBar.vue'
+import { loadBMapGL } from '../utils/bmap'
+
+const BMAP_AK = 'd3SExcYB3XNkA5KXvqdpAvsAilJxiNKx'
 
 const startAddr = ref('')
 const endAddr = ref('')
@@ -58,25 +61,19 @@ const distance = ref('')
 let map = null
 let transit = null
 
-// 动态加载百度地图 GL 脚本（原 html 中 <script src="//api.map.baidu.com/api?..."> 迁移）
-let bmapPromise = null
-function loadBMapGL() {
-  if (window.BMapGL) return Promise.resolve(window.BMapGL)
-  if (bmapPromise) return bmapPromise
-  bmapPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.src = '//api.map.baidu.com/api?type=webgl&v=1.0&ak=d3SExcYB3XNkA5KXvqdpAvsAilJxiNKx'
-    script.onload = () => resolve(window.BMapGL)
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-  return bmapPromise
+async function ensureBMapGL() {
+  try {
+    return await loadBMapGL(BMAP_AK)
+  } catch (e) {
+    console.error('[Map]', e)
+    ElMessage.error('地图加载失败，请检查网络或 AK 配置')
+    return null
+  }
 }
 
 async function initMap() {
-  await loadBMapGL()
-  const BMapGL = window.BMapGL
+  const BMapGL = await ensureBMapGL()
+  if (!BMapGL) return
   map = new BMapGL.Map('allmap')
   const geolocation = new BMapGL.Geolocation()
   geolocation.getCurrentPosition((r) => {
@@ -92,8 +89,8 @@ async function initMap() {
 }
 
 async function initAutocomplete() {
-  await loadBMapGL()
-  const BMapGL = window.BMapGL
+  const BMapGL = await ensureBMapGL()
+  if (!BMapGL) return
   const startAddrInput = document.getElementById('startAddrInput')
   const endAddrInput = document.getElementById('endAddrInput')
 

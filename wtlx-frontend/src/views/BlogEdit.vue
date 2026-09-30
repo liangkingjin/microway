@@ -34,16 +34,20 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '../api/request'
+import request, { uploadRequest } from '../api/request'
 
 const router = useRouter()
 
+// fileList 保存可直接展示的 URL（/imgs/blogs/...）
 const fileList = ref([])
+// fileNames 保存服务端返回的相对路径（/blogs/...），删除接口需要的是这个
+const fileNames = ref([])
 const params = reactive({})
 const shops = ref([])
 const shopName = ref('')
 const selectedShop = ref({})
 const fileInput = ref(null)
+const submitting = ref(false)
 
 onMounted(() => {
   queryShops()
@@ -64,13 +68,19 @@ function submitBlog() {
     ElMessage.error('请填写游记内容')
     return
   }
+  if (submitting.value) return
+  submitting.value = true
 
-  const data = { ...params }
+  const data = { title: params.title, content: params.content }
   data.images = fileList.value.join(',')
-  data.shopId = selectedShop.value.id
+  if (selectedShop.value.id) data.shopId = selectedShop.value.id
   request.post('/blog', data)
-    .then(() => router.push('/info'))
+    .then(() => {
+      ElMessage.success('发布成功')
+      router.push('/info')
+    })
     .catch(err => ElMessage.error(err))
+    .finally(() => { submitting.value = false })
 }
 
 function openFileDialog() {
@@ -79,20 +89,27 @@ function openFileDialog() {
 
 function fileSelected(e) {
   const file = fileInput.value.files[0]
+  if (!file) return
   const formData = new FormData()
   formData.append('file', file)
   const config = {
     headers: { 'Content-Type': 'multipart/form-data;boundary=' + new Date().getTime() }
   }
-  request.post('/upload/blog', formData, config)
-    .then(res => fileList.value.push('/imgs' + res.data))
+  uploadRequest.post('/upload/blog', formData, config)
+    .then(res => {
+      fileNames.value.push(res.data)
+      fileList.value.push('/imgs' + res.data)
+    })
     .catch(err => ElMessage.error(err))
   e.target.value = ''
 }
 
 function deletePic(i) {
-  request.get('/upload/blog/delete?name=' + fileList.value[i])
-    .then(() => fileList.value.splice(i, 1))
+  request.get('/upload/blog/delete?name=' + encodeURIComponent(fileNames.value[i]))
+    .then(() => {
+      fileList.value.splice(i, 1)
+      fileNames.value.splice(i, 1)
+    })
     .catch(err => ElMessage.error(err))
 }
 

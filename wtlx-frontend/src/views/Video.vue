@@ -2,15 +2,19 @@
   <div class="video-page">
     <div class="video-container">
       <div class="video-wrapper" @touchstart="touchStart" @touchend="touchEnd">
-        <div class="video-item" v-for="(video, index) in videos" :key="video.id" v-show="currentIndex === index">
+        <div class="video-item" v-for="(video, index) in videos" :key="video.videoId" v-show="currentIndex === index">
           <video
             class="video-player"
             :src="video.videoUrl"
             :ref="videoRef(index)"
-            :title="video.title"
+            :title="video.description"
             loop
+            muted
+            playsinline
+            preload="auto"
             @click="togglePlay(index)"
             @loadedmetadata="videoLoaded(index)"
+            @error="videoError"
           ></video>
           <div class="video-overlay">
             <div class="video-info">
@@ -49,6 +53,7 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '../api/request'
+import { safeAutoPlay, toggleVideo, onVideoError } from '../utils/video'
 
 const router = useRouter()
 
@@ -79,7 +84,9 @@ function loadVideos() {
       const data = res.data
       if (data) {
         const newVideos = data.map(video => ({
+          // VideosVO.id 是发布者 userId，视频主键是 videoId（key 与点赞都要用 videoId）
           id: video.id,
+          videoId: video.videoId,
           authorName: video.nickName,
           authorAvatar: video.icon,
           videoUrl: video.videoUrl,
@@ -102,19 +109,16 @@ function loadVideos() {
 
 function videoLoaded(index) {
   if (index === currentIndex.value) {
-    const video = videoEls[index]
-    if (video) video.play()
+    safeAutoPlay(videoEls[index])
   }
 }
 
+function videoError() {
+  onVideoError('视频加载失败，请检查视频地址或网络')
+}
+
 function togglePlay(index) {
-  const video = videoEls[index]
-  if (!video) return
-  if (video.paused) {
-    video.play()
-  } else {
-    video.pause()
-  }
+  toggleVideo(videoEls[index])
 }
 
 function touchStart(e) {
@@ -130,23 +134,18 @@ function touchEnd(e) {
     const cur = videoEls[currentIndex.value]
     if (cur) cur.pause()
     currentIndex.value++
-    nextTick(() => {
-      const v = videoEls[currentIndex.value]
-      if (v) v.play()
-    })
+    nextTick(() => safeAutoPlay(videoEls[currentIndex.value]))
   } else if (diff > 50 && currentIndex.value > 0) {
     const cur = videoEls[currentIndex.value]
     if (cur) cur.pause()
     currentIndex.value--
-    nextTick(() => {
-      const v = videoEls[currentIndex.value]
-      if (v) v.play()
-    })
+    nextTick(() => safeAutoPlay(videoEls[currentIndex.value]))
   }
 }
 
 function toggleLike(video) {
-  request.get(`/video-likes/${video.id}`)
+  // 点赞接口要的是视频主键 videoId，不是发布者 userId
+  request.get(`/video-likes/${video.videoId}`)
     .then(() => {
       video.isLiked = !video.isLiked
       video.likesCount = video.isLiked ? (video.likesCount || 0) + 1 : (video.likesCount || 1) - 1

@@ -11,7 +11,7 @@
       <input type="file" accept="video/*" @change="videoSelected" name="file" ref="videoInput" style="display: none">
       <div class="upload-btn" @click="openVideoDialog" v-if="!videoUrl">
         <el-icon><VideoCamera /></el-icon>
-        <div style="font-size: 12px;line-height: 12px">上传视频</div>
+        <div style="font-size: 12px;line-height: 12px">{{ uploading ? '上传中...' : '上传视频' }}</div>
       </div>
       <div class="video-preview" v-if="videoUrl" style="position: relative;">
         <video :src="videoUrl" controls style="width: 100%;max-height:200px;"></video>
@@ -28,7 +28,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import request from '../api/request'
+import request, { uploadRequest } from '../api/request'
 
 const router = useRouter()
 
@@ -36,6 +36,8 @@ const videoUrl = ref('')
 const videoFileName = ref('')
 const params = reactive({ description: '' })
 const videoInput = ref(null)
+const uploading = ref(false)
+const submitting = ref(false)
 
 function openVideoDialog() {
   if (videoInput.value) videoInput.value.click()
@@ -49,18 +51,20 @@ function videoSelected(e) {
   const config = {
     headers: { 'Content-Type': 'multipart/form-data;boundary=' + new Date().getTime() }
   }
-  request.post('/upload/video', formData, config)
+  uploading.value = true
+  uploadRequest.post('/upload/video', formData, config)
     .then(res => {
       videoFileName.value = res.data
       videoUrl.value = '/video' + res.data
     })
     .catch(err => ElMessage.error(err))
+    .finally(() => { uploading.value = false })
   e.target.value = ''
 }
 
 function deleteVideo() {
   if (!videoFileName.value) return
-  request.get('/upload/video/delete?name=' + videoFileName.value)
+  request.get('/upload/video/delete?name=' + encodeURIComponent(videoFileName.value))
     .then(() => {
       videoUrl.value = ''
       videoFileName.value = ''
@@ -74,6 +78,8 @@ function submitVideo() {
     ElMessage.warning('请先上传视频')
     return
   }
+  if (submitting.value) return
+  submitting.value = true
   const data = {
     description: params.description,
     videoUrl: videoUrl.value,
@@ -85,6 +91,7 @@ function submitVideo() {
       setTimeout(() => router.push('/video'), 800)
     })
     .catch(err => ElMessage.error(err))
+    .finally(() => { submitting.value = false })
 }
 
 function goBack() {
