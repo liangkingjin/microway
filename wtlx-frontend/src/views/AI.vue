@@ -641,22 +641,18 @@ function sendMessage() {
   eventSource.addEventListener('done', (event) => {
     flushDeltaSync()
     const payload = parseJson(event.data)
-    if (payload && typeof payload.content === 'string') {
-      const idx = ensureStreamingMessage()
-      messages.value[idx].content = payload.content.trim() || messages.value[idx].content
-      if (Array.isArray(payload.cards)) messages.value[idx].cards = payload.cards
-    } else if (event.data && event.data.trim()) {
-      const idx = ensureStreamingMessage()
-      messages.value[idx].content = event.data
-    }
-    // 正文与卡片都为空时不留空气泡（生成失败由 error 事件单独提示）
     const idx = ensureStreamingMessage()
     const msg = messages.value[idx]
+    if (payload && typeof payload.content === 'string') {
+      msg.content = payload.content.trim() || msg.content
+      if (Array.isArray(payload.cards)) msg.cards = payload.cards
+    } else if (event.data && event.data.trim()) {
+      msg.content = event.data
+    }
+    // 正文与卡片都为空时不留空气泡（生成失败由 error 事件单独提示）
     if (!msg.content && !(msg.cards && msg.cards.length)) {
       messages.value.splice(idx, 1)
       currentStreamingIndex = -1
-      finishStreaming()
-      return
     }
     finishStreaming()
   })

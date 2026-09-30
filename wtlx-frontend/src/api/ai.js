@@ -5,10 +5,6 @@
 // 一律使用 fetch / EventSource
 const AI_BASE = '/api'
 
-export function getAIBase() {
-  return AI_BASE
-}
-
 // GET /ai/react/history?threadId= → { threadId, messages: [{role, content, cards, time}] }
 // role 为 USER/ASSISTANT，按时间正序
 // cards 为该条助手回复附带的检索卡片（JSON 数组），未检索到时为空数组——历史恢复靠它

@@ -19,12 +19,4 @@ public interface RagSearchService {
      * @return 命中列表，按相似度降序；未命中返回空列表
      */
     List<RagHit> search(String query, int topK, double threshold, List<String> docTypes);
-
-    /**
-     * 使用默认参数（配置中的 searchTopK / searchThreshold）检索全部来源
-     *
-     * @param query 查询文本
-     * @return 命中列表
-     */
-    List<RagHit> search(String query);
 }

@@ -241,12 +241,8 @@ public class TripAgentServiceImpl implements TripAgentService {
                 finishLatch.await(SSE_TIMEOUT, TimeUnit.MILLISECONDS);
                 router.finish();
 
-                TripAnswerVO payload = TripAnswerVO.builder()
-                        .content(answer.toString())
-                        // 取卡片出口的合并全集：工具侧检索产出的卡片随 done / cancelled 返回并落库
-                        .cards(cardSink.snapshot())
-                        .thinking(steps)
-                        .build();
+                // 取卡片出口的合并全集：工具侧检索产出的卡片随 done / cancelled 返回并落库
+                TripAnswerVO payload = buildPayload(answer.toString(), steps, cardSink.snapshot());
 
                 if (failureRef.get() != null) {
                     // 生成失败：明确告知前端，而不是让前端收一个空正文的 done

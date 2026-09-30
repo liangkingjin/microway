@@ -51,12 +51,9 @@ public class RagCardAssembler {
             if (sourceId == null) {
                 continue;
             }
+            // 命中共已按相似度降序，同来源的第一条即为最高分，直接跳过后续切片
             String key = docType + ":" + sourceId;
-            TripCardVO existed = cards.get(key);
-            if (existed != null) {
-                if (hit.getScore() > existed.getScore()) {
-                    existed.setScore(hit.getScore());
-                }
+            if (cards.containsKey(key)) {
                 continue;
             }
             cards.put(key, TripCardVO.builder()

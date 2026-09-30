@@ -88,16 +88,9 @@ mybatis-plus:
   type-aliases-package: com.wtlx.domain.entity
 
 # ==================== AI 对话记忆配置 ====================
+# 摘要压缩的保留轮数 / 触发阈值 / 摘要长度上限是常量，写在
+# ConversationMemoryServiceImpl 与 SummaryCompressorImpl 里，此处不配（配了也没人读）
 trip-agent:
-  memory:
-    summary:
-      enabled: true
-      # 保留最近的历史消息数量
-      history-keep-turns: 8
-      # 触发摘要压缩的用户消息数
-      summary-start-turns: 9
-      # 摘要最大长度
-      max-summary-length: 200
   # RAG 检索：来源为站内游记（BLOG）与官方攻略（GUIDE）
   rag:
     enabled: true

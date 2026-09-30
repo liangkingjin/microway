@@ -72,9 +72,6 @@ public class StreamEventRouter {
      */
     private ThinkingStepVO openReasoningStep;
 
-    private final StringBuilder openReasoningText = new StringBuilder();
-
-
     public StreamEventRouter(StreamSink sink) {
         this.sink = sink;
     }
@@ -203,10 +200,8 @@ public class StreamEventRouter {
                     .text("")
                     .append(false)
                     .build();
-            openReasoningText.setLength(0);
             sink.onThinking(openReasoningStep);
         }
-        openReasoningText.append(text);
         sink.onThinking(ThinkingStepVO.builder()
                 .seq(seq)
                 .type("reasoning")
@@ -219,26 +214,6 @@ public class StreamEventRouter {
 
     private void closeReasoning() {
         openReasoningStep = null;
-        openReasoningText.setLength(0);
-    }
-
-    /**
-     * 记录一条外部产生的思考步骤（如"检索站内游记"），返回其序号
-     *
-     * @param type  步骤类型
-     * @param label 步骤标题
-     * @param text  步骤内容
-     * @return 步骤序号
-     */
-    public int addStep(String type, String label, String text) {
-        seq++;
-        sink.onThinking(ThinkingStepVO.builder()
-                .seq(seq)
-                .type(type)
-                .label(label)
-                .text(abbreviate(text))
-                .build());
-        return seq;
     }
 
     /**

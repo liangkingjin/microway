@@ -38,11 +38,6 @@ public class RagSearchServiceImpl implements RagSearchService {
     private RagProperties ragProperties;
 
     @Override
-    public List<RagHit> search(String query) {
-        return search(query, ragProperties.getSearchTopK(), ragProperties.getSearchThreshold(), null);
-    }
-
-    @Override
     public List<RagHit> search(String query, int topK, double threshold, List<String> docTypes) {
         if (!ragProperties.isEnabled() || !StringUtils.hasText(query)) {
             return List.of();

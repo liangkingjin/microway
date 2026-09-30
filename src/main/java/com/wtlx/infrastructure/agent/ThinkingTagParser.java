@@ -125,15 +125,6 @@ public class ThinkingTagParser {
         return out;
     }
 
-    /**
-     * 当前是否处于思考块内部（用于判断是否需要兜底）
-     *
-     * @return true 表示已进入 {@code <thinking>} 但尚未闭合
-     */
-    public boolean insideThinking() {
-        return state == Kind.THINKING;
-    }
-
     private Segment emit(String text) {
         return state == Kind.CONTENT ? Segment.content(text) : Segment.thinking(text);
     }
