@@ -2,25 +2,36 @@ package com.wtlx.service.impl;
 
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
-import com.alibaba.cloud.ai.graph.streaming.OutputType;
-import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wtlx.advisor.ConversationMemoryInterceptor;
+import com.wtlx.agent.StreamEventRouter;
 import com.wtlx.cancel.GenerationCancelService;
 import com.wtlx.cancel.GenerationCancelledException;
 import com.wtlx.cancel.GenerationHandle;
 import com.wtlx.cancel.GenerationRegistry;
 import com.wtlx.config.ConversationContextHolder;
+import com.wtlx.constant.RagDocType;
+import com.wtlx.entity.dto.ai.ThinkingStepVO;
+import com.wtlx.entity.dto.ai.TripAnswerVO;
+import com.wtlx.entity.dto.ai.TripCardVO;
+import com.wtlx.rag.RagCardAssembler;
+import com.wtlx.rag.RagHit;
+import com.wtlx.rag.RagProperties;
+import com.wtlx.rag.RagSearchService;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.SignalType;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -34,12 +45,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * 旅游规划 Agent 服务实现
  * 基于 SpringAI Alibaba ReactAgent 实现
  * <p>
- * 流式输出四个事件：
+ * 输出形态：结论正文与思考过程分离。
  * <ul>
- *     <li>{@code event: delta} — 模型增量文本，边生成边推送</li>
- *     <li>{@code event: done}  — 正常结束，携带本轮完整回答</li>
- *     <li>{@code event: cancelled} — 被取消（用户停止 / 断开 / 新流挤占），携带已生成部分</li>
- *     <li>{@code event: error} — 异常信息</li>
+ *     <li>{@code event: thinking} — 思考步骤（工具调用 / 检索 / 推理），JSON，按 seq 幂等覆盖</li>
+ *     <li>{@code event: delta}    — 结论正文增量，边生成边推送</li>
+ *     <li>{@code event: cards}    — 关联游记卡片，JSON 数组；未检索到则不发</li>
+ *     <li>{@code event: done}     — 正常结束，JSON，携带 content / cards / thinking</li>
+ *     <li>{@code event: cancelled}— 被取消（用户停止 / 断开 / 新流挤占），JSON，携带已生成部分</li>
+ *     <li>{@code event: error}    — 异常信息</li>
  * </ul>
  * 取消机制（多实例）：
  * <ol>
@@ -79,6 +92,18 @@ public class TripAgentServiceImpl implements TripAgentService {
 
     @Resource
     private GenerationCancelService cancelService;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
+    @Resource
+    private RagProperties ragProperties;
+
+    @Resource
+    private RagSearchService ragSearchService;
+
+    @Resource
+    private RagCardAssembler ragCardAssembler;
 
     /**
      * 心跳调度线程池（全实例共享）
@@ -136,6 +161,9 @@ public class TripAgentServiceImpl implements TripAgentService {
 
         CompletableFuture.runAsync(() -> {
             StringBuilder answer = new StringBuilder();
+            List<ThinkingStepVO> steps = new ArrayList<>();
+            Map<Integer, ThinkingStepVO> stepIndex = new HashMap<>();
+            AtomicReference<List<TripCardVO>> cardsRef = new AtomicReference<>(List.of());
             AtomicReference<SignalType> signalRef = new AtomicReference<>();
             try {
                 ConversationContextHolder.setConversationId(conversationId);
@@ -145,6 +173,34 @@ public class TripAgentServiceImpl implements TripAgentService {
                         // 流式执行跑在 Reactor 线程，ThreadLocal 传不过去，故同时放进元数据
                         .addMetadata(ConversationMemoryInterceptor.CONVERSATION_ID_KEY, conversationId)
                         .build();
+
+                StreamEventRouter router = new StreamEventRouter(new StreamEventRouter.StreamSink() {
+                    @Override
+                    public void onThinking(ThinkingStepVO step) {
+                        ThinkingStepVO existed = stepIndex.get(step.getSeq());
+                        if (existed == null) {
+                            steps.add(step);
+                            stepIndex.put(step.getSeq(), step);
+                        } else {
+                            existed.setLabel(step.getLabel());
+                            existed.setText(step.getText());
+                        }
+                        sendJson(emitter, "thinking", step);
+                    }
+
+                    @Override
+                    public void onContent(String chunk) {
+                        answer.append(chunk);
+                        if (!send(emitter, "delta", chunk)) {
+                            cancelled.set(true);
+                            throw new GenerationCancelledException(requestId);
+                        }
+                    }
+                });
+
+                // 会话级检索：命中站内内容才产出卡片，未命中则不发 cards 事件
+                List<TripCardVO> cards = resolveCards(message, router, emitter);
+                cardsRef.set(cards);
 
                 CountDownLatch finishLatch = new CountDownLatch(1);
                 long[] lastCheckAt = {System.currentTimeMillis()};
@@ -164,14 +220,7 @@ public class TripAgentServiceImpl implements TripAgentService {
                                     throw new GenerationCancelledException(requestId);
                                 }
                             }
-                            String chunk = extractChunk(output);
-                            if (chunk != null) {
-                                answer.append(chunk);
-                                if (!send(emitter, "delta", chunk)) {
-                                    cancelled.set(true);
-                                    throw new GenerationCancelledException(requestId);
-                                }
-                            }
+                            router.accept(output);
                         })
                         .doFinally(signal -> {
                             signalRef.set(signal);
@@ -192,22 +241,29 @@ public class TripAgentServiceImpl implements TripAgentService {
 
                 // subscribe 是异步的，这里等流结束再收尾（与原先 blockLast 的阻塞行为一致）
                 finishLatch.await(SSE_TIMEOUT, TimeUnit.MILLISECONDS);
+                router.finish();
+
+                TripAnswerVO payload = TripAnswerVO.builder()
+                        .content(answer.toString())
+                        .cards(cards)
+                        .thinking(steps)
+                        .build();
 
                 if (signalRef.get() == SignalType.CANCEL) {
                     log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字",
                             threadId, requestId, answer.length());
-                    send(emitter, "cancelled", answer.toString());
+                    sendJson(emitter, "cancelled", payload);
                 } else {
-                    send(emitter, "done", answer.toString());
+                    sendJson(emitter, "done", payload);
                 }
             } catch (GenerationCancelledException e) {
                 log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字",
                         threadId, requestId, answer.length());
-                send(emitter, "cancelled", answer.toString());
+                sendJson(emitter, "cancelled", buildPayload(answer.toString(), steps, cardsRef.get()));
             } catch (Exception e) {
                 if (cancelled.get()) {
                     log.info("生成已取消（客户端断开）, requestId: {}, 已生成 {} 字", requestId, answer.length());
-                    send(emitter, "cancelled", answer.toString());
+                    sendJson(emitter, "cancelled", buildPayload(answer.toString(), steps, cardsRef.get()));
                 } else {
                     log.error("ReactAgent 调用失败, threadId: {}, requestId: {}", threadId, requestId, e);
                     send(emitter, "error", "Agent 执行错误: " + e.getMessage());
@@ -227,13 +283,53 @@ public class TripAgentServiceImpl implements TripAgentService {
         return emitter;
     }
 
+    /**
+     * 解析本轮关联的游记卡片。
+     * <p>
+     * 由后端按用户原始问题做一次相似度检索（不依赖模型输出 id），命中则发 {@code cards} 事件；
+     * 未命中或检索异常时返回空集合，前端据此不渲染卡片区。
+     *
+     * @param message 用户消息
+     * @param router  分流器，用于记录"检索站内游记"这一思考步骤
+     * @param emitter SSE 通道，用于推送 cards 事件
+     * @return 卡片列表，可能为 empty 但绝不为 null
+     */
+    private List<TripCardVO> resolveCards(String message, StreamEventRouter router, SseEmitter emitter) {
+        if (ragProperties == null || !ragProperties.isEnabled()) {
+            return List.of();
+        }
+        try {
+            router.addStep("retrieval", "检索站内游记与攻略", message);
+            List<RagHit> hits = ragSearchService.search(message, ragProperties.getCardTopK(),
+                    ragProperties.getCardThreshold(), List.of(RagDocType.BLOG, RagDocType.GUIDE));
+            List<TripCardVO> cards = ragCardAssembler.assemble(hits);
+            if (!cards.isEmpty()) {
+                sendJson(emitter, "cards", cards);
+            }
+            router.addStep("retrieval", "检索结果",
+                    cards.isEmpty() ? "未命中相关内容" : "命中 " + cards.size() + " 条相关内容");
+            return cards;
+        } catch (Exception e) {
+            log.warn("会话级检索失败，本次不展示卡片: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private TripAnswerVO buildPayload(String content, List<ThinkingStepVO> steps, List<TripCardVO> cards) {
+        return TripAnswerVO.builder()
+                .content(content)
+                .cards(cards == null ? List.of() : cards)
+                .thinking(steps)
+                .build();
+    }
+
     @PreDestroy
     public void shutdownHeartbeatExecutor() {
         heartbeatExecutor.shutdownNow();
     }
 
     /**
-     * 发送事件；连接已断开时返回 false，由调用方决定是否取消生成
+     * 发送文本事件；连接已断开时返回 false，由调用方决定是否取消生成
      */
     private boolean send(SseEmitter emitter, String eventName, String data) {
         try {
@@ -246,17 +342,14 @@ public class TripAgentServiceImpl implements TripAgentService {
     }
 
     /**
-     * 取出模型增量文本；非增量输出（工具调用块、结束块等）返回 null
+     * 发送 JSON 事件；序列化失败或连接断开时不影响主流程
      */
-    private String extractChunk(Object nodeOutput) {
-        if (!(nodeOutput instanceof StreamingOutput<?> streamingOutput)
-                || streamingOutput.getOutputType() != OutputType.AGENT_MODEL_STREAMING) {
-            return null;
+    private boolean sendJson(SseEmitter emitter, String eventName, Object payload) {
+        try {
+            return send(emitter, eventName, objectMapper.writeValueAsString(payload));
+        } catch (Exception e) {
+            log.warn("SSE JSON 事件序列化失败, event: {}", eventName, e);
+            return false;
         }
-        Message message = streamingOutput.message();
-        if (message == null || message.getText() == null || message.getText().isEmpty()) {
-            return null;
-        }
-        return message.getText();
     }
 }

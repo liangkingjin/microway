@@ -105,9 +105,11 @@
 
 | 类型 | 文件 | 职责 |
 |---|---|---|
-| 新增 | `components/chat/ChatMessage.vue` | 单条消息容器（用户/AI） |
 | 新增 | `components/chat/ThinkingPanel.vue` | 思考步骤折叠面板 |
 | 新增 | `components/chat/BlogCardGrid.vue` | 游记卡片网格（空数组不渲染） |
+
+> 实现说明：原计划再抽一层 `ChatMessage.vue` 消息容器。编码时为把改动限制在局部，
+> 未引入该容器——AI.vue 的消息行结构保持原样，只在其内部挂载上面两个子组件。
 | 修改 | `api/ai.js` | 事件协议注释与类型约定 |
 | 修改 | `views/AI.vue` | 消息模型扩展 + SSE 解析 + 组装子组件 |
 
@@ -135,7 +137,11 @@ UUID chunkId = UUID.nameUUIDFromBytes((docType + ":" + sourceId + ":" + chunkInd
 | `contentHash` | 该来源内容的哈希，用于变更判定 | `a1b2c3…` |
 | `sourceUpdatedAt` | 源数据更新时间 | `2026-09-30T10:00:00` |
 
-### 3.2 索引表（PG，`vector_db`）
+### 3.2 索引表（MySQL 业务库 `wtlx`）
+
+> 实现说明：设计阶段计划放在 PG，编码时改到 MySQL。原因——MyBatis 主数据源即 MySQL，
+> 索引表若放 PG 需要再配一套 `SqlSessionFactory`；它只是元数据，与主业务同库还能和
+> `tb_blog` / `guides` 在同一事务语义下维护。建表脚本：`db/rag-source-index-mysql.sql`。
 
 ```sql
 CREATE TABLE IF NOT EXISTS rag_source_index (
@@ -294,12 +300,12 @@ public class RagDocIndexMessage implements Serializable {
 
 ---
 
-## 七、待确认决策点
+## 七、决策结论（已确认）
 
-| 编号 | 决策点 | 备选 |
+| 编号 | 决策点 | 结论 |
 |---|---|---|
-| A | 正文/思考分离方式 | A1 标记分流（`<thinking>` 块 + 兜底，推荐）／A2 两阶段提交工具（结构化可靠但正文非 token 级流式） |
-| B | 旧静态 Markdown 知识 | B1 移除（检索源只留两类，推荐）／B2 保留为 `DOC` 类型降级兜底 |
-| C | 卡片来源 | C1 后端独立检索（推荐，确定性）／C2 模型输出引用 id |
-| D | 文件生成类工具 | D1 只删 PDF，保留 Markdown／D2 两者都删（推荐，输出全部走正文） |
-| E | 历史消息是否持久化思考与卡片 | E1 只存正文（推荐，改动小）／E2 conversation_message 加 `extra` JSON 列 |
+| A | 正文/思考分离方式 | **A1 标记分流 + 兜底**：`<thinking>` 块内为思考，块外为正文；整轮无标记时全部归正文 |
+| B | 旧静态 Markdown 知识 | **B1 移除**：删除 `TripDocumentLoader`、`TripKnowledgeInitializer` 与 `document/*.md` |
+| C | 卡片来源 | **C1 后端独立检索**：用用户 query 直接检索，不依赖模型输出 id |
+| D | 文件生成类工具 | **D2 两者都删**：`PDFGenerationTool` / `MarkdownGenerationTool` 下线，iText 依赖一并移除 |
+| E | 历史消息是否持久化思考与卡片 | **E1 只存正文**：`conversation_message` 结构不变，历史回放时思考与卡片为空集合 |

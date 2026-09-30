@@ -10,6 +10,15 @@ public class RabbitMQConstants {
     public static final String ORDER_QUEUE = "order.queue";
     public static final String ORDER_ROUTING_KEY = "order";
 
+    /**
+     * RAG 文档索引交换机：游记发布 / 攻略变更后触发切片与向量入库
+     */
+    public static final String RAG_DOC_EXCHANGE = "rag.doc.exchange";
+
+    public static final String RAG_DOC_QUEUE = "rag.doc.index.queue";
+
+    public static final String RAG_DOC_ROUTING_KEY = "rag.doc.index";
+
     private RabbitMQConstants() {
     }
 }

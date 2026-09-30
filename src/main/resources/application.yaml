@@ -92,8 +92,24 @@ trip-agent:
       summary-start-turns: 9
       # 摘要最大长度
       max-summary-length: 200
+  # RAG 检索：来源为站内游记（BLOG）与官方攻略（GUIDE）
   rag:
     enabled: true
+    # 单个切片目标字符数与重叠字符数
+    chunk-size: 500
+    chunk-overlap: 80
+    # 单个来源最大切片数
+    max-chunks: 50
+    # 单批 embedding 条数（DashScope text-embedding 接口上限 10）
+    embedding-batch-size: 10
+    # Agent 检索工具参数
+    search-top-k: 5
+    search-threshold: 0.35
+    # 前端卡片取用条数与阈值（低于阈值视为未命中，不渲染卡片区）
+    card-top-k: 4
+    card-threshold: 0.3
+    # 启动时是否对缺失索引的来源做全量回填（量大时建议关闭，改由管理接口触发）
+    rebuild-on-startup: false
 
 # ==================== AI WebSearchTool 配置 ====================
 search-api:

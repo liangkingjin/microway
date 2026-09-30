@@ -24,12 +24,16 @@ export function deleteHistory(threadId) {
 
 // SSE GET /ai/react/trip/chat?message=&threadId=&requestId=
 // requestId 由前端生成，是取消这条流的唯一凭据（多实例下服务端靠它定位到持流实例）
-// 协议（ReactAgent 流式）：
-//   event: delta     —— 模型增量文本，边生成边推送（可多次）
-//   event: done      —— 正常结束，data 携带本轮完整回答
-//   event: cancelled —— 被取消（用户停止/断开/新流挤占），data 携带已生成部分
+// 协议（ReactAgent 流式，输出形态：结论正文 + 思考步骤 + 关联卡片）：
+//   event: thinking  —— 思考步骤，JSON { seq, type, label, text }，同 seq 重复表示更新该步骤
+//                       type 取值：tool=工具调用 / retrieval=检索 / reasoning=推理 / node=图节点
+//   event: delta     —— 结论正文增量，边生成边推送（可多次）
+//   event: cards     —— 关联游记 / 攻略卡片，JSON 数组；后端未检索到相关内容时不发此事件
+//   event: done      —— 正常结束，JSON { content, cards, thinking }
+//   event: cancelled —— 被取消（用户停止/断开/新流挤占），JSON 同 done 结构
 //   event: error     —— 异常信息（MessageEvent 带 data）
 // 连接会在服务端 complete 后关闭（无 [DONE] 哨兵）
+// done / cancelled 为 JSON，前端解析失败时按纯文本兜底，保证协议灰度期不白屏
 export function openChatStream(message, threadId, requestId) {
   const qs = `message=${encodeURIComponent(message)}&threadId=${encodeURIComponent(threadId)}&requestId=${encodeURIComponent(requestId || '')}`
   return new EventSource(`${AI_BASE}/ai/react/trip/chat?${qs}`)

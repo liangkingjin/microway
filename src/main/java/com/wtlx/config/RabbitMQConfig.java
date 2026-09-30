@@ -51,6 +51,24 @@ public class RabbitMQConfig {
         return new Jackson2JsonMessageConverter();
     }
 
+    /**
+     * RAG 文档索引队列与绑定：游记发布事件驱动切片入库
+     */
+    @Bean
+    public TopicExchange ragDocExchange() {
+        return new TopicExchange(RabbitMQConstants.RAG_DOC_EXCHANGE);
+    }
+
+    @Bean
+    public Queue ragDocQueue() {
+        return new Queue(RabbitMQConstants.RAG_DOC_QUEUE, true);
+    }
+
+    @Bean
+    public Binding ragDocBinding(Queue ragDocQueue, TopicExchange ragDocExchange) {
+        return BindingBuilder.bind(ragDocQueue).to(ragDocExchange).with(RabbitMQConstants.RAG_DOC_ROUTING_KEY);
+    }
+
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);

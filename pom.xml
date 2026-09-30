@@ -200,14 +200,6 @@
             <version>1.19.1</version>
         </dependency>
 
-        <!-- PDF 生成库 -->
-        <dependency>
-            <groupId>com.itextpdf</groupId>
-            <artifactId>itext-core</artifactId>
-            <version>9.1.0</version>
-            <type>pom</type>
-        </dependency>
-
         <!-- Spring AI MCP client starter -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
