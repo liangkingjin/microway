@@ -14,7 +14,11 @@ export default defineConfig({
         target: 'http://localhost:9528',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
-      }
+      },
+      // 上传落盘的图片/视频：与后端静态映射保持一致（后端 MvcConfig 已映射 /imgs/**、/video/**）
+      // 开发环境不启动 nginx 时也能预览/播放，生产仍由 nginx 直出
+      '/imgs': { target: 'http://localhost:9528', changeOrigin: true },
+      '/video': { target: 'http://localhost:9528', changeOrigin: true }
     }
   },
   build: {

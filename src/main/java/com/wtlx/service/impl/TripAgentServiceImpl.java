@@ -3,21 +3,21 @@ package com.wtlx.service.impl;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.wtlx.advisor.ConversationMemoryInterceptor;
-import com.wtlx.agent.StreamEventRouter;
-import com.wtlx.cancel.GenerationCancelService;
-import com.wtlx.cancel.GenerationCancelledException;
-import com.wtlx.cancel.GenerationHandle;
-import com.wtlx.cancel.GenerationRegistry;
+import com.wtlx.infrastructure.advisor.ConversationMemoryInterceptor;
+import com.wtlx.infrastructure.agent.StreamEventRouter;
+import com.wtlx.infrastructure.cancel.GenerationCancelService;
+import com.wtlx.infrastructure.cancel.GenerationCancelledException;
+import com.wtlx.infrastructure.cancel.GenerationHandle;
+import com.wtlx.infrastructure.cancel.GenerationRegistry;
 import com.wtlx.config.ConversationContextHolder;
-import com.wtlx.constant.RagDocType;
-import com.wtlx.entity.dto.ai.ThinkingStepVO;
-import com.wtlx.entity.dto.ai.TripAnswerVO;
-import com.wtlx.entity.dto.ai.TripCardVO;
-import com.wtlx.rag.RagCardAssembler;
-import com.wtlx.rag.RagHit;
-import com.wtlx.rag.RagProperties;
-import com.wtlx.rag.RagSearchService;
+import com.wtlx.infrastructure.rag.RagDocType;
+import com.wtlx.domain.entity.dto.ai.ThinkingStepVO;
+import com.wtlx.domain.entity.dto.ai.TripAnswerVO;
+import com.wtlx.domain.entity.dto.ai.TripCardVO;
+import com.wtlx.infrastructure.rag.generation.RagCardAssembler;
+import com.wtlx.infrastructure.rag.retriever.RagHit;
+import com.wtlx.infrastructure.rag.config.RagProperties;
+import com.wtlx.infrastructure.rag.retriever.RagSearchService;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
 import jakarta.annotation.PreDestroy;
@@ -204,6 +204,7 @@ public class TripAgentServiceImpl implements TripAgentService {
 
                 CountDownLatch finishLatch = new CountDownLatch(1);
                 long[] lastCheckAt = {System.currentTimeMillis()};
+                AtomicReference<Throwable> failureRef = new AtomicReference<>();
 
                 Disposable disposable = tripReactAgent.stream(message, config)
                         .doOnNext(output -> {
@@ -230,7 +231,11 @@ public class TripAgentServiceImpl implements TripAgentService {
                                 output -> {
                                 },
                                 error -> {
+                                    // 流内部报错（模型调用失败、工具异常等）必须记下来：
+                                    // 否则会走到 done 分支，前端只收到空正文，看不到任何错误提示。
+                                    // 取消属于预期行为，不算失败。
                                     if (!(error instanceof GenerationCancelledException)) {
+                                        failureRef.set(error);
                                         log.error("ReactAgent 流式执行异常, requestId: {}", requestId, error);
                                     }
                                 },
@@ -249,7 +254,12 @@ public class TripAgentServiceImpl implements TripAgentService {
                         .thinking(steps)
                         .build();
 
-                if (signalRef.get() == SignalType.CANCEL) {
+                if (failureRef.get() != null) {
+                    // 生成失败：明确告知前端，而不是让前端收一个空正文的 done
+                    String reason = failureRef.get().getMessage();
+                    log.error("本轮生成失败, threadId: {}, requestId: {}", threadId, requestId);
+                    send(emitter, "error", "生成失败: " + (reason == null ? "未知错误" : reason));
+                } else if (signalRef.get() == SignalType.CANCEL) {
                     log.info("生成已取消, threadId: {}, requestId: {}, 已生成 {} 字",
                             threadId, requestId, answer.length());
                     sendJson(emitter, "cancelled", payload);
@@ -270,7 +280,9 @@ public class TripAgentServiceImpl implements TripAgentService {
                 }
             } finally {
                 if (!answer.isEmpty()) {
-                    memoryService.appendAndCompressIfNeeded(conversationId, message, answer.toString());
+                    // 卡片随正文一起落库，重新进入会话时才能恢复"正文 + 游记卡片"的展示
+                    memoryService.appendAndCompressIfNeeded(
+                            conversationId, message, answer.toString(), toJson(cardsRef.get()));
                 }
                 ConversationContextHolder.clear();
                 generationRegistry.unregister(requestId);
@@ -287,7 +299,7 @@ public class TripAgentServiceImpl implements TripAgentService {
      * 解析本轮关联的游记卡片。
      * <p>
      * 由后端按用户原始问题做一次相似度检索（不依赖模型输出 id），命中则发 {@code cards} 事件；
-     * 未命中或检索异常时返回空集合，前端据此不渲染卡片区。
+     * 未命中则返回空集合，前端据此不渲染卡片区。检索异常向上传播，由调用方统一收口。
      *
      * @param message 用户消息
      * @param router  分流器，用于记录"检索站内游记"这一思考步骤
@@ -298,20 +310,30 @@ public class TripAgentServiceImpl implements TripAgentService {
         if (ragProperties == null || !ragProperties.isEnabled()) {
             return List.of();
         }
+        router.addStep("retrieval", "检索站内游记与攻略", message);
+        List<RagHit> hits = ragSearchService.search(message, ragProperties.getCardTopK(),
+                ragProperties.getCardThreshold(), List.of(RagDocType.BLOG, RagDocType.GUIDE));
+        List<TripCardVO> cards = ragCardAssembler.assemble(hits);
+        if (!cards.isEmpty()) {
+            sendJson(emitter, "cards", cards);
+        }
+        router.addStep("retrieval", "检索结果",
+                cards.isEmpty() ? "未命中相关内容" : "命中 " + cards.size() + " 条相关内容");
+        return cards;
+    }
+
+    /**
+     * 卡片列表序列化为 JSON；空列表与序列化失败都返回 null（表示该消息无卡片）
+     */
+    private String toJson(List<TripCardVO> cards) {
+        if (cards == null || cards.isEmpty()) {
+            return null;
+        }
         try {
-            router.addStep("retrieval", "检索站内游记与攻略", message);
-            List<RagHit> hits = ragSearchService.search(message, ragProperties.getCardTopK(),
-                    ragProperties.getCardThreshold(), List.of(RagDocType.BLOG, RagDocType.GUIDE));
-            List<TripCardVO> cards = ragCardAssembler.assemble(hits);
-            if (!cards.isEmpty()) {
-                sendJson(emitter, "cards", cards);
-            }
-            router.addStep("retrieval", "检索结果",
-                    cards.isEmpty() ? "未命中相关内容" : "命中 " + cards.size() + " 条相关内容");
-            return cards;
+            return objectMapper.writeValueAsString(cards);
         } catch (Exception e) {
-            log.warn("会话级检索失败，本次不展示卡片: {}", e.getMessage());
-            return List.of();
+            log.warn("卡片序列化失败，本次不落库卡片: {}", e.getMessage());
+            return null;
         }
     }
 

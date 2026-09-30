@@ -15,11 +15,17 @@ spring:
     password: 1234
   # ==================== AI 能力（原 TripAgent 收口） ====================
   ai:
-    dashscope:
+    # ---- 对话模型：走阿里云百炼「OpenAI 兼容模式」，支持 qwen3.x / deepseek-v4 新模型 ----
+    openai:
       api-key: ${DASHSCOPE_API_KEY}
+      # 阿里云百炼兼容模式根地址，客户端会自动拼 /v1/chat/completions
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
       chat:
         options:
-          model: deepseek-v4-flash-0731
+          model: qwen3.7-flash
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      # DashScope 客户端仅用于 Embedding（text-embedding-v3 在旧版 REST 路径下正常可用）
       embedding:
         options:
           # text-embedding-v3 向量维度为 1024，需与 pgvector.dimensions 保持一致
@@ -79,7 +85,7 @@ ai:
     password: 123456
 
 mybatis-plus:
-  type-aliases-package: com.wtlx.entity
+  type-aliases-package: com.wtlx.domain.entity
 
 # ==================== AI 对话记忆配置 ====================
 trip-agent:
@@ -102,12 +108,14 @@ trip-agent:
     max-chunks: 50
     # 单批 embedding 条数（DashScope text-embedding 接口上限 10）
     embedding-batch-size: 10
-    # Agent 检索工具参数
+    # Agent 检索工具参数（阈值偏松，保留召回，由模型判断相关性）
     search-top-k: 5
-    search-threshold: 0.35
+    # 实测：相关查询 top5 落在 0.62~0.71，无关查询（如"帮我写一段Java代码"）最高 0.46
+    search-threshold: 0.5
     # 前端卡片取用条数与阈值（低于阈值视为未命中，不渲染卡片区）
+    # 卡片直接暴露给用户，阈值比检索更严：0.55 高于无关查询上限 0.46，低于相关查询下限 0.62
     card-top-k: 4
-    card-threshold: 0.3
+    card-threshold: 0.55
     # 启动时是否对缺失索引的来源做全量回填（量大时建议关闭，改由管理接口触发）
     rebuild-on-startup: false
 

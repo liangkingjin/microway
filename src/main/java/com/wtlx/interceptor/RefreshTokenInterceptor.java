@@ -2,7 +2,7 @@ package com.wtlx.interceptor;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
-import com.wtlx.entity.dto.UserDTO;
+import com.wtlx.domain.entity.dto.UserDTO;
 import com.wtlx.utils.RedisConstants;
 import com.wtlx.utils.UserHolder;
 import org.springframework.data.redis.core.StringRedisTemplate;

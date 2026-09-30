@@ -2,9 +2,9 @@ package com.wtlx.controller;
 
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.dto.UserDTO;
-import com.wtlx.entity.Blog;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.dto.UserDTO;
+import com.wtlx.domain.entity.Blog;
 import com.wtlx.service.IBlogService;
 import com.wtlx.utils.SystemConstants;
 import com.wtlx.utils.UserHolder;

@@ -1,15 +1,15 @@
 package com.wtlx.controller;
 
-import com.wtlx.constant.RagDocType;
-import com.wtlx.entity.RagSourceIndex;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.mapper.RagSourceIndexMapper;
-import com.wtlx.rag.RagHit;
-import com.wtlx.rag.RagIndexService;
-import com.wtlx.rag.RagProperties;
-import com.wtlx.rag.RagRebuildService;
-import com.wtlx.rag.RagSearchService;
-import com.wtlx.rag.RebuildStat;
+import com.wtlx.infrastructure.rag.RagDocType;
+import com.wtlx.domain.entity.RagSourceIndex;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.repository.mapper.RagSourceIndexMapper;
+import com.wtlx.infrastructure.rag.retriever.RagHit;
+import com.wtlx.infrastructure.rag.loader.RagIndexService;
+import com.wtlx.infrastructure.rag.config.RagProperties;
+import com.wtlx.infrastructure.rag.loader.RagRebuildService;
+import com.wtlx.infrastructure.rag.retriever.RagSearchService;
+import com.wtlx.infrastructure.rag.loader.RebuildStat;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import jakarta.annotation.Resource;

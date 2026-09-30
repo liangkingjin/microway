@@ -1,12 +1,12 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.TeamMembers;
-import com.wtlx.entity.Teams;
-import com.wtlx.entity.User;
-import com.wtlx.mapper.TeamMembersMapper;
-import com.wtlx.mapper.TeamsMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.TeamMembers;
+import com.wtlx.domain.entity.Teams;
+import com.wtlx.domain.entity.User;
+import com.wtlx.repository.mapper.TeamMembersMapper;
+import com.wtlx.repository.mapper.TeamsMapper;
 import com.wtlx.service.ITeamsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.service.IUserService;

@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.Provinces;
+import com.wtlx.domain.entity.Provinces;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;

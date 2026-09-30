@@ -1,8 +1,8 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.Guides;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.Guides;
 import com.wtlx.service.IGuidesService;
 import com.wtlx.service.impl.GuidesServiceImpl;
 import io.swagger.annotations.Api;

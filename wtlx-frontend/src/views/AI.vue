@@ -96,6 +96,11 @@
           </div>
         </div>
 
+        <div v-show="showScrollToBottom" class="scroll-to-bottom" @click="scrollToBottom(true)">
+          <el-icon><ArrowDown /></el-icon>
+          <span>新消息</span>
+        </div>
+
         <div class="input-area">
           <div class="input-box-wrapper">
             <textarea
@@ -128,9 +133,29 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import MarkdownIt from 'markdown-it'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/ai'
 import ThinkingPanel from '../components/chat/ThinkingPanel.vue'
 import BlogCardGrid from '../components/chat/BlogCardGrid.vue'
+
+// html:false —— 模型输出不可信，禁止原始 HTML 透传（v-html 下的 XSS 面）
+// linkify:true —— 裸 URL 自动成链接；breaks:true —— 单换行视为 <br>，契合行程文本的排版习惯
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  typographer: false
+})
+
+// 外链新窗口打开，并阻断 tabnabbing
+const defaultLinkOpen = md.renderer.rules.link_open
+  || ((tokens, idx, opts, _env, self) => self.renderToken(tokens, idx, opts))
+md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
+  tokens[idx].attrSet('target', '_blank')
+  tokens[idx].attrSet('rel', 'noopener noreferrer')
+  return defaultLinkOpen(tokens, idx, opts, env, self)
+}
 
 const router = useRouter()
 
@@ -152,12 +177,21 @@ const sessions = ref([])
 const currentChatId = ref('')
 const currentChatTitle = ref('AI助手')
 const showSidebar = ref(false)
+// 滚动行为控制：是否贴近底部、用户是否主动上滑、是否显示回到底部按钮
+const isNearBottom = ref(true)
+const userScrolledUp = ref(false)
+const showScrollToBottom = ref(false)
+let lastScrollTop = 0
+let ignoreNextScroll = false
 
 onMounted(() => {
-  nextTick(() => {
-    scrollToBottom()
-  })
+  scrollToBottom(true)
   loadSessions()
+
+  if (messagesRef.value) {
+    messagesRef.value.addEventListener('scroll', onMessagesScroll)
+    lastScrollTop = messagesRef.value.scrollTop
+  }
 
   // 旧版单会话记录（ai_chat_id）在 loadSessions 中迁移为会话列表；无任何记录时新建
   if (currentChatId.value) {
@@ -168,6 +202,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   closeEventSource()
   discardStreamingState()
+  if (messagesRef.value) {
+    messagesRef.value.removeEventListener('scroll', onMessagesScroll)
+  }
 })
 
 // 输入内容变化时自适应高度
@@ -177,18 +214,13 @@ watch(inputMessage, () => {
 
 function renderMarkdown(text) {
   if (!text) return ''
-  let html = text
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    // 列表块须先于斜体处理：连续的 "- xxx" 行整体包成 <ul>
-    .replace(/((?:^[-*] .+$\n?)+)/gm, (block) =>
-      '<ul>' + block.replace(/^[-*] (.+)$/gm, '<li>$1</li>') + '</ul>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
-  return html
+  // 流式到达时代码块围栏可能尚未闭合，补一个收尾，避免其后内容被整段吞进 <pre>
+  let source = text
+  const fences = (source.match(/^```/gm) || []).length
+  if (fences % 2 === 1) {
+    source += '\n```'
+  }
+  return md.render(source)
 }
 
 // SSE data 兼容解析：新协议为 JSON，解析失败时按纯文本兜底
@@ -312,22 +344,22 @@ async function loadHistory(threadId) {
   if (!threadId) return
   try {
     const data = await fetchHistory(threadId)
-    // 响应结构: { threadId, context: [{role, content}] }，过滤系统/工具消息
-    const context = (data && data.context) || []
-    const history = context.filter(m => m.role === 'USER' || m.role === 'ASSISTANT')
+    // 响应结构: { threadId, messages: [{role, content, cards, time}] }
+    const history = ((data && data.messages) || [])
+      .filter(m => m.role === 'USER' || m.role === 'ASSISTANT')
     if (history.length === 0) {
       messages.value = []
       return
     }
-    // 历史只存结论正文（思考步骤与卡片不落库），故这两项恢复为空集合
+    // 正文与检索卡片均已落库，此处一并恢复；思考过程不落库，恢复为空
     messages.value = history.map(m => ({
       content: m.content || '',
       isUser: m.role === 'USER',
-      time: Date.now(),
+      time: m.time ? new Date(m.time).getTime() : Date.now(),
       thinking: [],
-      cards: []
+      cards: Array.isArray(m.cards) ? m.cards : []
     }))
-    nextTick(() => scrollToBottom())
+    scrollToBottom(true)
   } catch (err) {
     console.error('加载历史记录失败:', err)
   }
@@ -379,7 +411,7 @@ function addMessage(content, isUser) {
     thinking: [],
     cards: []
   })
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 // 思考步骤与卡片可能先于正文到达，统一在这里确保 AI 消息气泡已创建
@@ -398,26 +430,61 @@ function ensureStreamingMessage() {
   return currentStreamingIndex
 }
 
-// 按 seq 幂等写入思考步骤：同序号为"更新该步骤"（工具参数逐步补全）
+// 按 seq 幂等写入思考步骤：同序号为"更新该步骤"（工具参数逐步补全）。
+// append=true 表示后端只发了新增文本，需追加到同序号步骤末尾（推理文本逐字到达，
+// 若每次都发全量，传输量会随帧数平方增长）。
 function upsertThinkingStep(step) {
   if (!step || step.seq == null) return
   const idx = ensureStreamingMessage()
   const list = messages.value[idx].thinking
   const existed = list.find(item => item.seq === step.seq)
+  const text = step.text || ''
   if (existed) {
     existed.type = step.type
     existed.label = step.label
-    existed.text = step.text
+    existed.text = step.append ? (existed.text || '') + text : text
   } else {
-    list.push({ seq: step.seq, type: step.type, label: step.label, text: step.text })
+    list.push({ seq: step.seq, type: step.type, label: step.label, text })
   }
   connectionStatus.value = 'streaming'
 }
 
-function scrollToBottom() {
+function updateScrollState(el) {
+  const threshold = 80
+  const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+  const near = remaining <= threshold
+  isNearBottom.value = near
+  // 一旦回到底部，认为用户已经结束"上滑回看"
+  if (near) userScrolledUp.value = false
+  showScrollToBottom.value = !near && messages.value.length > 0
+}
+
+function onMessagesScroll(e) {
+  const el = e.target
+  if (ignoreNextScroll) {
+    ignoreNextScroll = false
+    updateScrollState(el)
+    return
+  }
+  const delta = lastScrollTop - el.scrollTop
+  lastScrollTop = el.scrollTop
+  updateScrollState(el)
+  // delta > 0 表示 scrollTop 减小，即用户向上滚动查看历史
+  if (delta > 30 && !isNearBottom.value) {
+    userScrolledUp.value = true
+  }
+}
+
+// 仅当用户未主动上滑，或调用方显式 force 时，才执行滚动到底部。
+// AI 流式输出过程中不再强制拉拽用户视角，避免打断阅读历史消息。
+function scrollToBottom(force = false) {
+  if (!force && userScrolledUp.value) return
   nextTick(() => {
     if (messagesRef.value) {
+      ignoreNextScroll = true
       messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+      lastScrollTop = messagesRef.value.scrollTop
+      updateScrollState(messagesRef.value)
     }
   })
 }
@@ -575,6 +642,15 @@ function sendMessage() {
       const idx = ensureStreamingMessage()
       messages.value[idx].content = event.data
     }
+    // 正文与卡片都为空时不留空气泡（生成失败由 error 事件单独提示）
+    const idx = ensureStreamingMessage()
+    const msg = messages.value[idx]
+    if (!msg.content && !(msg.cards && msg.cards.length)) {
+      messages.value.splice(idx, 1)
+      currentStreamingIndex = -1
+      finishStreaming()
+      return
+    }
     finishStreaming()
   })
 
@@ -619,7 +695,7 @@ function sendMessage() {
     eventSource.close()
   }
 
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 function generateUUID() {
@@ -640,7 +716,11 @@ function toggleSidebar() {
    主体布局由 .chat-layout 固定 100vh 承担 */
 .chat-layout {
   display: flex;
-  height: 100vh;
+  height: 100vh; /* 旧浏览器兜底 */
+  height: 100dvh; /* 移动端动态视口，避免地址栏导致布局被顶出 */
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
   overflow: hidden;
   background: var(--bg-primary, #faf9f6);
   font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -757,6 +837,7 @@ function toggleSidebar() {
   overflow: hidden;
 }
 .chat-container {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -773,6 +854,7 @@ function toggleSidebar() {
   background: #fff;
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
+  z-index: 100;
 }
 .header-back-btn {
   display: flex;
@@ -784,17 +866,21 @@ function toggleSidebar() {
   font-size: 20px;
   cursor: pointer;
   position: absolute;
-  left: 16px;
+  left: 12px;
   z-index: 10;
 }
 .header-title {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  max-width: 50%;
   font-size: 17px;
   font-weight: 600;
   color: #333;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 .toggle-sidebar {
   cursor: pointer;
@@ -867,6 +953,10 @@ function toggleSidebar() {
   gap: 0.25rem;
   max-width: 70%;
 }
+/* 回答消息承载完整行程方案，阅读区域需要更宽 */
+.ai-message-row .message-body {
+  max-width: min(860px, 82%);
+}
 .bubble {
   padding: 1rem 1.5rem;
   border-radius: 1rem;
@@ -880,6 +970,10 @@ function toggleSidebar() {
   border-bottom-left-radius: 0.375rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.08);
+  /* 正文区放宽：字号、行高与内边距同步放大，长行程更易读 */
+  padding: 1.25rem 1.75rem;
+  font-size: 15px;
+  line-height: 1.85;
 }
 .user-bubble {
   background: linear-gradient(135deg, #1a5f7a, #2d7a99);
@@ -932,9 +1026,37 @@ function toggleSidebar() {
 }
 .input-area {
   padding: 1rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   background: #ffffff;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
+}
+
+/* 回到底部浮动按钮：当用户上滑查看历史且仍有新消息时显示 */
+.scroll-to-bottom {
+  position: fixed;
+  right: 16px;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #ffffff;
+  color: #1a5f7a;
+  border: 1px solid rgba(26, 95, 122, 0.25);
+  border-radius: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+.scroll-to-bottom:hover {
+  background: #f0f9fb;
+  transform: translateY(-1px);
+}
+.scroll-to-bottom .el-icon {
+  font-size: 14px;
 }
 .input-box-wrapper {
   display: flex;
@@ -1066,6 +1188,66 @@ function toggleSidebar() {
   color: #1a5f7a;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
+/* ---- Markdown 渲染内容的排版 ---- */
+.bubble :deep(p) {
+  margin: 0 0 0.75em;
+}
+.bubble :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.bubble :deep(h1),
+.bubble :deep(h2),
+.bubble :deep(h3),
+.bubble :deep(h4) {
+  margin: 1.1em 0 0.5em;
+  color: #1a5f7a;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.bubble :deep(h1) { font-size: 1.3em; }
+.bubble :deep(h2) { font-size: 1.2em; }
+.bubble :deep(h3) { font-size: 1.1em; }
+.bubble :deep(h4) { font-size: 1em; }
+/* 首个标题不额外留白，避免气泡顶部空一块 */
+.bubble :deep(> :first-child) {
+  margin-top: 0;
+}
+.bubble :deep(ul),
+.bubble :deep(ol) {
+  padding-left: 1.4em;
+  margin: 0 0 0.75em;
+}
+.bubble :deep(li) {
+  margin-bottom: 0.35em;
+}
+.bubble :deep(li > ul),
+.bubble :deep(li > ol) {
+  margin: 0.35em 0 0;
+}
+.bubble :deep(a) {
+  color: #1a5f7a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bubble :deep(a:hover) {
+  color: #2d7a99;
+}
+.bubble :deep(strong) {
+  font-weight: 600;
+  color: #14394a;
+}
+.bubble :deep(blockquote) {
+  margin: 0.75em 0;
+  padding: 0.25em 0 0.25em 0.9em;
+  border-left: 3px solid #b8d8e4;
+  color: #4a5568;
+  background: #f7fbfc;
+}
+.bubble :deep(hr) {
+  border: none;
+  border-top: 1px solid #e8edf2;
+  margin: 1em 0;
+}
 .bubble :deep(pre) {
   background-color: #2d2d2d;
   color: #f8f8f2;
@@ -1079,11 +1261,21 @@ function toggleSidebar() {
   background-color: rgba(0,0,0,0.05);
   padding: 2px 4px;
   border-radius: 3px;
+  font-size: 0.9em;
+}
+/* 代码块内的 code 不再叠加行内样式，否则底色与内边距冲突 */
+.bubble :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.9em;
 }
 .bubble :deep(table) {
   border-collapse: collapse;
   width: 100%;
   margin: 10px 0;
+  display: block;
+  overflow-x: auto;
 }
 .bubble :deep(th),
 .bubble :deep(td) {
@@ -1094,21 +1286,6 @@ function toggleSidebar() {
 .bubble :deep(th) {
   background-color: #f2f2f2;
 }
-.bubble :deep(ul),
-.bubble :deep(ol) {
-  padding-left: 20px;
-}
-.bubble :deep(li) {
-  margin-bottom: 5px;
-}
-.bubble :deep(h1),
-.bubble :deep(h2),
-.bubble :deep(h3),
-.bubble :deep(h4) {
-  margin-top: 16px;
-  margin-bottom: 8px;
-  color: #333;
-}
 
 /* 移动端：侧边栏以抽屉形式浮出，并加遮罩 */
 @media (max-width: 767px) {
@@ -1118,16 +1295,21 @@ function toggleSidebar() {
   .sidebar {
     position: fixed;
     left: 0;
-    top: 0;
+    top: env(safe-area-inset-top);
     bottom: 0;
-    z-index: 1000;
+    width: 240px;
+    z-index: 2000;
   }
   .sidebar-backdrop {
     display: block;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 999;
+    z-index: 1999;
+  }
+  /* 抽屉内标题栏避开状态栏 */
+  .sidebar-header {
+    padding-top: calc(16px + env(safe-area-inset-top));
   }
 }
 </style>

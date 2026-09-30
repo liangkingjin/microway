@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.conversation.ConversationMessage;
+import com.wtlx.domain.entity.conversation.ConversationMessage;
 
 import java.util.List;
 

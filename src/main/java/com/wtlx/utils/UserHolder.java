@@ -1,6 +1,6 @@
 package com.wtlx.utils;
 
-import com.wtlx.entity.dto.UserDTO;
+import com.wtlx.domain.entity.dto.UserDTO;
 
 public class UserHolder {
     private static final ThreadLocal<UserDTO> tl = new ThreadLocal<>();

@@ -1,17 +1,17 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.User;
-import com.wtlx.entity.VideoLikes;
-import com.wtlx.entity.Videos;
-import com.wtlx.mapper.VideoLikesMapper;
-import com.wtlx.mapper.VideosMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.User;
+import com.wtlx.domain.entity.VideoLikes;
+import com.wtlx.domain.entity.Videos;
+import com.wtlx.repository.mapper.VideoLikesMapper;
+import com.wtlx.repository.mapper.VideosMapper;
 import com.wtlx.service.IUserService;
 import com.wtlx.service.IVideosService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.utils.UserHolder;
-import com.wtlx.entity.vo.VideosVO;
+import com.wtlx.domain.entity.vo.VideosVO;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;

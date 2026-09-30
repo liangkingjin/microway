@@ -1,15 +1,12 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.ThumbsUpRecord;
-import com.wtlx.mapper.BlogMapper;
-import com.wtlx.mq.ThumbsUpMessage;
+import com.wtlx.repository.mapper.BlogMapper;
 import com.wtlx.service.IThumbsUpRecordService;
 import com.wtlx.service.ILikedService;
 import com.wtlx.service.ITbBlogCommentsService;
 import com.wtlx.utils.RedisConstants;
-import com.wtlx.utils.RabbitMQConstants;
+import com.wtlx.infrastructure.mq.producer.ThumbsUpProducer;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -36,7 +33,7 @@ public class LikedServiceImpl implements ILikedService {
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
-    private RabbitTemplate rabbitTemplate;
+    private ThumbsUpProducer thumbsUpProducer;
 
     @Resource
     private BlogMapper blogMapper;
@@ -113,8 +110,7 @@ public class LikedServiceImpl implements ILikedService {
             // 2. ZSet点赞数+1，member为实体ID
             stringRedisTemplate.opsForZSet().incrementScore(countKey, id.toString(), 1);
             // 3. 发送RabbitMQ消息异步更新业务表点赞数
-            rabbitTemplate.convertAndSend(RabbitMQConstants.THUMBS_UP_EXCHANGE, RabbitMQConstants.THUMBS_UP_ROUTING_KEY,
-                    new ThumbsUpMessage(type, id, true));
+            thumbsUpProducer.sendThumbChange(type, id, true);
 
             log.info("用户[{}]点赞了{}类型ID为[{}]的内容", userId, type, id);
             return true;
@@ -125,8 +121,7 @@ public class LikedServiceImpl implements ILikedService {
             // 2. ZSet点赞数-1
             stringRedisTemplate.opsForZSet().incrementScore(countKey, id.toString(), -1);
             // 3. 发送RabbitMQ消息异步更新业务表点赞数
-            rabbitTemplate.convertAndSend(RabbitMQConstants.THUMBS_UP_EXCHANGE, RabbitMQConstants.THUMBS_UP_ROUTING_KEY,
-                    new ThumbsUpMessage(type, id, false));
+            thumbsUpProducer.sendThumbChange(type, id, false);
 
             log.info("用户[{}]取消了{}类型ID为[{}]的内容的点赞", userId, type, id);
             return false;

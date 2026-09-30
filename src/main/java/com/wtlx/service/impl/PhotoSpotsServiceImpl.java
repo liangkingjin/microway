@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.PhotoSpots;
-import com.wtlx.mapper.PhotoSpotsMapper;
+import com.wtlx.domain.entity.PhotoSpots;
+import com.wtlx.repository.mapper.PhotoSpotsMapper;
 import com.wtlx.service.IPhotoSpotsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

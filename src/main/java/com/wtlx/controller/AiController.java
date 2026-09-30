@@ -1,10 +1,14 @@
 package com.wtlx.controller;
 
-import com.wtlx.cancel.GenerationCancelService;
-import com.wtlx.entity.conversation.enums.MessageRole;
+import com.wtlx.infrastructure.cancel.GenerationCancelService;
+import com.wtlx.domain.entity.conversation.ConversationMessage;
+import com.wtlx.domain.entity.conversation.enums.MessageRole;
+import com.wtlx.domain.entity.dto.ai.TripCardVO;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,12 +24,16 @@ import java.util.UUID;
 
 /**
  * 旅游规划智能体接口（新链路）
- * <p>
- * 基于 SpringAI Alibaba ReactAgent，老链路接口已归档至 {@link LegacyTripApi}。
  */
 @RestController
 @RequestMapping("/ai")
+@Slf4j
 public class AiController {
+
+    /**
+     * 前端展示历史时最多回溯的消息条数（用户+助手合计）
+     */
+    private static final int HISTORY_DISPLAY_LIMIT = 100;
 
     @Resource
     private TripAgentService tripAgentService;
@@ -35,6 +43,9 @@ public class AiController {
 
     @Resource
     private GenerationCancelService generationCancelService;
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     /**
      * 流式调用基于 SpringAI Alibaba ReactAgent 的旅游规划智能体
@@ -84,19 +95,43 @@ public class AiController {
     @GetMapping("/react/history")
     public Map<String, Object> getReactAgentHistory(@RequestParam String threadId) {
         String conversationId = "react_agent_" + threadId;
-        List<org.springframework.ai.chat.messages.Message> context =
-                conversationMemoryService.loadContext(conversationId);
+
+        // 展示用历史：含检索卡片，供重新进入会话时恢复"正文 + 游记卡片"混合展示。
+        // 与模型上下文（context）分开取，避免卡片 JSON 混入送给模型的消息里。
+        List<ConversationMessage> recent = conversationMemoryService.loadRecentMessages(
+                conversationId, HISTORY_DISPLAY_LIMIT);
 
         Map<String, Object> result = new HashMap<>();
         result.put("threadId", threadId);
-        result.put("context", context.stream().map(msg -> {
-            Map<String, String> item = new HashMap<>();
-            item.put("role", MessageRole.fromMessageType(msg.getMessageType()).getCode());
-            item.put("content", msg.getText());
-            return item;
-        }).toList());
+        result.put("messages", recent.stream()
+                .filter(msg -> msg.getRole() == MessageRole.USER || msg.getRole() == MessageRole.ASSISTANT)
+                .map(msg -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("role", msg.getRole().getCode());
+                    item.put("content", msg.getContent());
+                    item.put("cards", parseCards(msg.getCardsJson()));
+                    item.put("time", msg.getCreatedAt() == null ? null : msg.getCreatedAt().toString());
+                    return item;
+                })
+                .toList());
 
         return result;
+    }
+
+    /**
+     * 解析历史消息里附带的卡片 JSON，缺失或非法时返回空集合
+     */
+    private List<TripCardVO> parseCards(String cardsJson) {
+        if (cardsJson == null || cardsJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            TripCardVO[] cards = objectMapper.readValue(cardsJson, TripCardVO[].class);
+            return cards == null ? List.of() : List.of(cards);
+        } catch (Exception e) {
+            log.warn("历史消息卡片解析失败，按无卡片处理: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     /**

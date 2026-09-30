@@ -116,42 +116,50 @@
     <div v-if="activeTab === 'discover'" class="discover-container">
       <div class="video-container">
         <div class="video-wrapper" @touchstart="touchStart" @touchend="touchEnd">
-          <div class="video-item" v-for="(video, index) in videos" :key="video.id" v-show="currentIndex === index">
-            <video
-              class="video-player"
-              :src="video.videoUrl"
-              :ref="videoRef(index)"
-              :title="video.title"
-              loop
-              @click="togglePlay(index)"
-              @loadedmetadata="videoLoaded(index)"
-            ></video>
-            <div class="video-overlay">
-              <div class="video-info">
-                <div class="video-title">{{ video.authorName }}</div>
-                <div class="video-desc">{{ video.description }}</div>
+          <!-- 只渲染当前及前后各一个视频：未渲染的 <video> 不会发起请求，避免一次性拉取全部视频。
+           v-if 必须放在 template 上，Vue3 不允许 v-if 与 v-for 同元素且 v-if 拿不到循环变量 -->
+          <template v-for="(video, index) in videos" :key="video.videoId">
+            <div class="video-item" v-if="Math.abs(index - currentIndex) <= 1" v-show="currentIndex === index">
+              <video
+                class="video-player"
+                :src="video.videoUrl"
+                :ref="videoRef(index)"
+                :title="video.description"
+                loop
+                muted
+                playsinline
+                preload="auto"
+                @click="togglePlay(index)"
+                @loadedmetadata="videoLoaded(index)"
+                @error="videoError(index)"
+              ></video>
+              <div class="video-overlay">
+                <div class="video-info">
+                  <div class="video-title">{{ video.authorName }}</div>
+                  <div class="video-desc">{{ video.description }}</div>
+                </div>
+              </div>
+              <div class="video-actions">
+                <div class="action-item">
+                  <div class="action-btn avatar" @click="goToOtherInfo(video.id)">
+                    <img :src="video.authorAvatar" :alt="video.authorName" :title="video.authorName">
+                  </div>
+                </div>
+                <div class="action-item">
+                  <div class="action-btn like-btn" @click="toggleLike(video)">
+                    <el-icon :style="{ color: video.isLiked ? '#ff2442' : '#fff' }"><Thumb /></el-icon>
+                  </div>
+                  <div class="action-count">{{ video.likesCount || 0 }}</div>
+                </div>
+                <div class="action-item">
+                  <div class="action-btn" @click="showComments(video)">
+                    <el-icon><ChatDotRound /></el-icon>
+                  </div>
+                  <div class="action-count">{{ video.commentsCount || 0 }}</div>
+                </div>
               </div>
             </div>
-            <div class="video-actions">
-              <div class="action-item">
-                <div class="action-btn avatar" @click="goToOtherInfo(video.id)">
-                  <img :src="video.authorAvatar" :alt="video.authorName" :title="video.authorName">
-                </div>
-              </div>
-              <div class="action-item">
-                <div class="action-btn like-btn" @click="toggleLike(video)">
-                  <el-icon :style="{ color: video.isLiked ? '#ff2442' : '#fff' }"><Thumb /></el-icon>
-                </div>
-                <div class="action-count">{{ video.likesCount || 0 }}</div>
-              </div>
-              <div class="action-item">
-                <div class="action-btn" @click="showComments(video)">
-                  <el-icon><ChatDotRound /></el-icon>
-                </div>
-                <div class="action-count">{{ video.commentsCount || 0 }}</div>
-              </div>
-            </div>
-          </div>
+          </template>
           <div v-if="loading" class="loading-text">加载中...</div>
         </div>
       </div>
@@ -167,6 +175,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElLoading } from 'element-plus'
 import FootBar from '../components/FootBar.vue'
 import request from '../api/request'
+import { safeAutoPlay, toggleVideo, onVideoError } from '../utils/video'
 
 const router = useRouter()
 
@@ -188,7 +197,6 @@ const activeTab = ref('recommend')
 const videos = ref([])
 const currentIndex = ref(0)
 const startY = ref(0)
-const isPlaying = ref(false)
 const followedBlogs = ref([])
 
 // 视频 DOM 引用（Vue2 :ref="'video'+index" → Vue3 函数式 ref）
@@ -222,6 +230,8 @@ function loadVideos() {
       const data = res.data
       if (data) {
         videos.value = data.map(video => ({
+          // 注意：VideosVO.id 返回的是发布者 userId，视频主键是 videoId，
+          // key 必须用 videoId，否则同一作者的多个视频 key 重复会导致渲染/ref 错乱
           id: video.id,
           videoId: video.videoId,
           authorName: video.nickName,
@@ -236,7 +246,7 @@ function loadVideos() {
     })
     .catch(err => {
       console.error('加载视频失败:', err)
-      ElMessage.error('加载视频失败')
+      ElMessage.error(typeof err === 'string' ? err : '加载视频失败')
     })
 }
 
@@ -246,13 +256,14 @@ function videoLoaded(index) {
   }
 }
 
+function videoError(index) {
+  console.error('视频加载失败:', videos.value[index] && videos.value[index].videoUrl)
+  onVideoError('视频加载失败，请检查视频地址或网络')
+}
+
 function playVideo(index) {
   pauseAllVideos()
-  const video = videoEls[index]
-  if (video) {
-    video.play()
-    isPlaying.value = true
-  }
+  safeAutoPlay(videoEls[index])
 }
 
 function pauseAllVideos() {
@@ -260,28 +271,17 @@ function pauseAllVideos() {
     const video = videoEls[i]
     if (video) video.pause()
   })
-  isPlaying.value = false
 }
 
 function pauseCurrentVideo() {
   const video = videoEls[currentIndex.value]
   if (video) {
     video.pause()
-    isPlaying.value = false
   }
 }
 
 function togglePlay(index) {
-  const video = videoEls[index]
-  if (video) {
-    if (video.paused) {
-      video.play()
-      isPlaying.value = true
-    } else {
-      video.pause()
-      isPlaying.value = false
-    }
-  }
+  toggleVideo(videoEls[index])
 }
 
 function touchStart(e) {

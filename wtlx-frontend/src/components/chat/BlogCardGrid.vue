@@ -54,6 +54,8 @@ function open(card) {
   margin-top: 10px;
   border-top: 1px solid #edf2f7;
   padding-top: 10px;
+  /* 卡片区是回答的附属内容，宽度收敛，不与正文争阅读空间 */
+  max-width: 520px;
 }
 .grid-title {
   font-size: 12px;
@@ -62,12 +64,13 @@ function open(card) {
 }
 .grid-body {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 10px;
+  /* 一行两个，窄屏回退单列 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 .blog-card {
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: #fff;
   cursor: pointer;
@@ -79,26 +82,28 @@ function open(card) {
 }
 .card-cover {
   position: relative;
-  height: 84px;
+  /* 封面压低，卡片整体更紧凑 */
+  height: 64px;
   background-color: #edf2f7;
   background-size: cover;
   background-position: center;
 }
 .card-type {
   position: absolute;
-  left: 6px;
-  top: 6px;
-  padding: 1px 6px;
+  left: 5px;
+  top: 5px;
+  padding: 0 5px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 16px;
   color: #fff;
   background: rgba(45, 55, 72, 0.75);
 }
 .card-info {
-  padding: 8px;
+  padding: 6px 7px;
 }
 .card-title {
-  font-size: 13px;
+  font-size: 12px;
   color: #2d3748;
   line-height: 1.4;
   display: -webkit-box;
@@ -107,15 +112,15 @@ function open(card) {
   overflow: hidden;
 }
 .card-meta {
-  margin-top: 4px;
-  font-size: 11px;
+  margin-top: 3px;
+  font-size: 10px;
   color: #a0aec0;
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 .card-summary {
-  margin-top: 4px;
-  font-size: 11px;
+  margin-top: 3px;
+  font-size: 10px;
   color: #718096;
   line-height: 1.5;
   display: -webkit-box;
@@ -123,9 +128,13 @@ function open(card) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* 窄屏：两列挤不下，回退单列 */
 @media (max-width: 480px) {
   .grid-body {
     grid-template-columns: 1fr;
+  }
+  .blog-card-grid {
+    max-width: 320px;
   }
 }
 </style>

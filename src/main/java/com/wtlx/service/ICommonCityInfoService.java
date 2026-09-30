@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.CommonCityInfo;
+import com.wtlx.domain.entity.CommonCityInfo;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 

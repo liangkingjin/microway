@@ -1,9 +1,9 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.CommonCityInfo;
-import com.wtlx.entity.UserCheckIns;
-import com.wtlx.mapper.UserCheckInsMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.CommonCityInfo;
+import com.wtlx.domain.entity.UserCheckIns;
+import com.wtlx.repository.mapper.UserCheckInsMapper;
 import com.wtlx.service.ICommonCityInfoService;
 import com.wtlx.service.IUserCheckInsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;

@@ -2,9 +2,9 @@ package com.wtlx.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.ShopType;
-import com.wtlx.mapper.ShopTypeMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.ShopType;
+import com.wtlx.repository.mapper.ShopTypeMapper;
 import com.wtlx.service.IShopTypeService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.utils.RedisConstants;

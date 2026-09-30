@@ -1,10 +1,10 @@
 package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.VideoLikes;
-import com.wtlx.mapper.VideoLikesMapper;
-import com.wtlx.mapper.VideosMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.VideoLikes;
+import com.wtlx.repository.mapper.VideoLikesMapper;
+import com.wtlx.repository.mapper.VideosMapper;
 import com.wtlx.service.IVideoLikesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.utils.UserHolder;

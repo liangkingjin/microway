@@ -140,6 +140,7 @@ import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
 import request from '../api/request'
 import { getUrlParam } from '../utils/index'
+import { loadBMapGL } from '../utils/bmap'
 
 const router = useRouter()
 
@@ -279,25 +280,19 @@ function loadScenicDetail(id) {
     })
 }
 
-// 动态加载百度地图 GL 脚本（与 map.html 不同的 ak，按原页保留）
-let bmapPromise = null
-function loadBMapGL() {
-  if (window.BMapGL) return Promise.resolve(window.BMapGL)
-  if (bmapPromise) return bmapPromise
-  bmapPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.src = '//api.map.baidu.com/api?type=webgl&v=1.0&ak=MZZeQYAyRjGoHdKCNdD9R2IzHFDRbsZ3'
-    script.onload = () => resolve(window.BMapGL)
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-  return bmapPromise
-}
+// 百度地图 GL（与 Map.vue 不同的 ak，按原页保留）；必须用 &callback 方式异步加载，
+// 否则百度返回的引导脚本里的 document.write 会被浏览器忽略，BMapGL 永远挂载不上
+const BMAP_AK = 'MZZeQYAyRjGoHdKCNdD9R2IzHFDRbsZ3'
 
 async function showMap() {
   mapVisible.value = true
-  await loadBMapGL()
+  try {
+    await loadBMapGL(BMAP_AK)
+  } catch (e) {
+    console.error('[ScenicDetail]', e)
+    ElMessage.error('地图加载失败，请检查网络或 AK 配置')
+    return
+  }
   await nextTick()
   initMap()
 }

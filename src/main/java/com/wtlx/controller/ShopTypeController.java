@@ -1,7 +1,7 @@
 package com.wtlx.controller;
 
 
-import com.wtlx.entity.dto.Result;
+import com.wtlx.domain.entity.dto.Result;
 import com.wtlx.service.IShopTypeService;
 import io.swagger.annotations.Api;
 import org.springframework.web.bind.annotation.GetMapping;

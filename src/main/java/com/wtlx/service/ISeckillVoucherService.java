@@ -1,6 +1,6 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.SeckillVoucher;
+import com.wtlx.domain.entity.SeckillVoucher;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 

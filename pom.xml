@@ -143,6 +143,14 @@
             <groupId>com.alibaba.cloud.ai</groupId>
             <artifactId>spring-ai-alibaba-agent-framework</artifactId>
         </dependency>
+        <!-- Spring AI OpenAI 客户端：用于接入阿里云百炼「OpenAI 兼容模式」端点。
+             DashScope 客户端（1.1.2.1）走的是旧版 REST 协议，仅支持 qwen-turbo / qwen-plus
+             等经典模型；qwen3.x / deepseek-v4 系列必须走兼容模式，故对话模型改用 OpenAI 协议。
+             Embedding 仍由 DashScope 客户端提供（text-embedding-v3）。 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>com.github.xiaoymin</groupId>

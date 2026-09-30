@@ -1,5 +1,6 @@
 package com.wtlx.service;
 
+import com.wtlx.domain.entity.conversation.ConversationMessage;
 import org.springframework.ai.chat.messages.Message;
 
 import java.util.List;
@@ -21,11 +22,22 @@ public interface ConversationMemoryService {
     /**
      * 追加新消息并检查是否需要压缩
      *
-     * @param conversationId 对话ID
-     * @param userMessage    用户消息
-     * @param assistantReply 助手回复
+     * @param conversationId     对话ID
+     * @param userMessage        用户消息
+     * @param assistantReply     助手回复正文
+     * @param assistantCardsJson 助手回复附带的检索卡片 JSON；无卡片时传 null
      */
-    void appendAndCompressIfNeeded(String conversationId, String userMessage, String assistantReply);
+    void appendAndCompressIfNeeded(String conversationId, String userMessage,
+                                   String assistantReply, String assistantCardsJson);
+
+    /**
+     * 加载最近的消息用于前端展示（含检索卡片，与模型上下文无关）
+     *
+     * @param conversationId 对话ID
+     * @param limit          最多返回的条数
+     * @return 按时间正序排列的消息列表
+     */
+    List<ConversationMessage> loadRecentMessages(String conversationId, int limit);
 
     /**
      * 清除对话记忆

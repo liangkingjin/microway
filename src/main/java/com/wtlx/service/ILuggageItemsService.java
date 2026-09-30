@@ -1,7 +1,7 @@
 package com.wtlx.service;
 
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.LuggageItems;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.LuggageItems;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 

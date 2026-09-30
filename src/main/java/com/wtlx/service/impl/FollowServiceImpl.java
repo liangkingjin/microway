@@ -2,10 +2,10 @@ package com.wtlx.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.dto.UserDTO;
-import com.wtlx.entity.Follow;
-import com.wtlx.mapper.FollowMapper;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.dto.UserDTO;
+import com.wtlx.domain.entity.Follow;
+import com.wtlx.repository.mapper.FollowMapper;
 import com.wtlx.service.IFollowService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.service.IUserService;

@@ -3,23 +3,22 @@ package com.wtlx.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.Orders;
-import com.wtlx.entity.ScenicSpots;
-import com.wtlx.entity.ScenicSeckill;
-import com.wtlx.mapper.OrdersMapper;
-import com.wtlx.mapper.ScenicSeckillMapper;
-import com.wtlx.mq.OrderMessage;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.Orders;
+import com.wtlx.domain.entity.ScenicSpots;
+import com.wtlx.domain.entity.ScenicSeckill;
+import com.wtlx.repository.mapper.OrdersMapper;
+import com.wtlx.repository.mapper.ScenicSeckillMapper;
+import com.wtlx.infrastructure.mq.message.OrderMessage;
 import com.wtlx.service.IOrdersService;
 import com.wtlx.service.IScenicSpotsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.utils.RateLimiter;
-import com.wtlx.utils.RabbitMQConstants;
 import com.wtlx.utils.RedisConstants;
 import com.wtlx.utils.RedisIdWorker;
 import com.wtlx.utils.UserHolder;
+import com.wtlx.infrastructure.mq.producer.OrderProducer;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -77,7 +76,7 @@ public class OrdersServiceImpl extends ServiceImpl<OrdersMapper, Orders> impleme
     private ScenicSeckillMapper scenicSeckillMapper;
 
     @Autowired
-    private RabbitTemplate rabbitTemplate;
+    private OrderProducer orderProducer;
 
     /**
      * Lua脚本对象，用于执行原子性的秒杀逻辑
@@ -195,7 +194,7 @@ public class OrdersServiceImpl extends ServiceImpl<OrdersMapper, Orders> impleme
         message.setTotalPrice(scenic.getPrice().multiply(new BigDecimal(quantity)));
         message.setUserId(userId);
 
-        rabbitTemplate.convertAndSend(RabbitMQConstants.ORDER_EXCHANGE, RabbitMQConstants.ORDER_ROUTING_KEY, message);
+        orderProducer.sendOrderCreated(message);
 
         return Result.ok("秒杀成功，订单已创建");
     }

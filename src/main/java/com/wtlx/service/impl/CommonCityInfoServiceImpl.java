@@ -1,7 +1,7 @@
 package com.wtlx.service.impl;
 
-import com.wtlx.entity.CommonCityInfo;
-import com.wtlx.mapper.CommonCityInfoMapper;
+import com.wtlx.domain.entity.CommonCityInfo;
+import com.wtlx.repository.mapper.CommonCityInfoMapper;
 import com.wtlx.service.ICommonCityInfoService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;

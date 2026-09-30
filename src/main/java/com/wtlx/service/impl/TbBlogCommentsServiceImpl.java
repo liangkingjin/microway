@@ -2,12 +2,12 @@ package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.wtlx.entity.TbBlogComments;
-import com.wtlx.entity.User;
-import com.wtlx.mapper.TbBlogCommentsMapper;
-import com.wtlx.mapper.UserMapper;
+import com.wtlx.domain.entity.TbBlogComments;
+import com.wtlx.domain.entity.User;
+import com.wtlx.repository.mapper.TbBlogCommentsMapper;
+import com.wtlx.repository.mapper.UserMapper;
 import com.wtlx.service.ITbBlogCommentsService;
-import com.wtlx.entity.vo.CommentVO;
+import com.wtlx.domain.entity.vo.CommentVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

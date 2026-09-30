@@ -2,15 +2,14 @@ package com.wtlx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.wtlx.entity.Blog;
-import com.wtlx.entity.ThumbsUpRecord;
-import com.wtlx.entity.TbBlogComments;
-import com.wtlx.mapper.ThumbsUpRecordMapper;
-import com.wtlx.mapper.BlogMapper;
+import com.wtlx.domain.entity.Blog;
+import com.wtlx.domain.entity.ThumbsUpRecord;
+import com.wtlx.domain.entity.TbBlogComments;
+import com.wtlx.repository.mapper.ThumbsUpRecordMapper;
+import com.wtlx.repository.mapper.BlogMapper;
 import com.wtlx.service.IThumbsUpRecordService;
 import com.wtlx.service.ITbBlogCommentsService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;

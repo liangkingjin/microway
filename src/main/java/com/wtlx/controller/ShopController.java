@@ -3,9 +3,9 @@ package com.wtlx.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wtlx.entity.dto.Result;
-import com.wtlx.entity.dto.SearchParams;
-import com.wtlx.entity.Shop;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.dto.SearchParams;
+import com.wtlx.domain.entity.Shop;
 import com.wtlx.service.IShopService;
 import com.wtlx.utils.SystemConstants;
 import io.swagger.annotations.Api;

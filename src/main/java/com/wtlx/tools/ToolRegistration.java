@@ -1,5 +1,6 @@
 package com.wtlx.tools;
 
+import com.wtlx.infrastructure.rag.adapter.RagRetrievalTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
