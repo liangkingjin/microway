@@ -96,6 +96,11 @@
           </div>
         </div>
 
+        <div v-show="showScrollToBottom" class="scroll-to-bottom" @click="scrollToBottom(true)">
+          <el-icon><ArrowDown /></el-icon>
+          <span>新消息</span>
+        </div>
+
         <div class="input-area">
           <div class="input-box-wrapper">
             <textarea
@@ -129,6 +134,7 @@
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/ai'
 import ThinkingPanel from '../components/chat/ThinkingPanel.vue'
 import BlogCardGrid from '../components/chat/BlogCardGrid.vue'
@@ -171,12 +177,21 @@ const sessions = ref([])
 const currentChatId = ref('')
 const currentChatTitle = ref('AI助手')
 const showSidebar = ref(false)
+// 滚动行为控制：是否贴近底部、用户是否主动上滑、是否显示回到底部按钮
+const isNearBottom = ref(true)
+const userScrolledUp = ref(false)
+const showScrollToBottom = ref(false)
+let lastScrollTop = 0
+let ignoreNextScroll = false
 
 onMounted(() => {
-  nextTick(() => {
-    scrollToBottom()
-  })
+  scrollToBottom(true)
   loadSessions()
+
+  if (messagesRef.value) {
+    messagesRef.value.addEventListener('scroll', onMessagesScroll)
+    lastScrollTop = messagesRef.value.scrollTop
+  }
 
   // 旧版单会话记录（ai_chat_id）在 loadSessions 中迁移为会话列表；无任何记录时新建
   if (currentChatId.value) {
@@ -187,6 +202,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   closeEventSource()
   discardStreamingState()
+  if (messagesRef.value) {
+    messagesRef.value.removeEventListener('scroll', onMessagesScroll)
+  }
 })
 
 // 输入内容变化时自适应高度
@@ -341,7 +359,7 @@ async function loadHistory(threadId) {
       thinking: [],
       cards: Array.isArray(m.cards) ? m.cards : []
     }))
-    nextTick(() => scrollToBottom())
+    scrollToBottom(true)
   } catch (err) {
     console.error('加载历史记录失败:', err)
   }
@@ -393,7 +411,7 @@ function addMessage(content, isUser) {
     thinking: [],
     cards: []
   })
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 // 思考步骤与卡片可能先于正文到达，统一在这里确保 AI 消息气泡已创建
@@ -431,10 +449,42 @@ function upsertThinkingStep(step) {
   connectionStatus.value = 'streaming'
 }
 
-function scrollToBottom() {
+function updateScrollState(el) {
+  const threshold = 80
+  const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+  const near = remaining <= threshold
+  isNearBottom.value = near
+  // 一旦回到底部，认为用户已经结束"上滑回看"
+  if (near) userScrolledUp.value = false
+  showScrollToBottom.value = !near && messages.value.length > 0
+}
+
+function onMessagesScroll(e) {
+  const el = e.target
+  if (ignoreNextScroll) {
+    ignoreNextScroll = false
+    updateScrollState(el)
+    return
+  }
+  const delta = lastScrollTop - el.scrollTop
+  lastScrollTop = el.scrollTop
+  updateScrollState(el)
+  // delta > 0 表示 scrollTop 减小，即用户向上滚动查看历史
+  if (delta > 30 && !isNearBottom.value) {
+    userScrolledUp.value = true
+  }
+}
+
+// 仅当用户未主动上滑，或调用方显式 force 时，才执行滚动到底部。
+// AI 流式输出过程中不再强制拉拽用户视角，避免打断阅读历史消息。
+function scrollToBottom(force = false) {
+  if (!force && userScrolledUp.value) return
   nextTick(() => {
     if (messagesRef.value) {
+      ignoreNextScroll = true
       messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+      lastScrollTop = messagesRef.value.scrollTop
+      updateScrollState(messagesRef.value)
     }
   })
 }
@@ -645,7 +695,7 @@ function sendMessage() {
     eventSource.close()
   }
 
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 function generateUUID() {
@@ -666,7 +716,11 @@ function toggleSidebar() {
    主体布局由 .chat-layout 固定 100vh 承担 */
 .chat-layout {
   display: flex;
-  height: 100vh;
+  height: 100vh; /* 旧浏览器兜底 */
+  height: 100dvh; /* 移动端动态视口，避免地址栏导致布局被顶出 */
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
   overflow: hidden;
   background: var(--bg-primary, #faf9f6);
   font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -783,6 +837,7 @@ function toggleSidebar() {
   overflow: hidden;
 }
 .chat-container {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -799,6 +854,7 @@ function toggleSidebar() {
   background: #fff;
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
+  z-index: 100;
 }
 .header-back-btn {
   display: flex;
@@ -810,17 +866,21 @@ function toggleSidebar() {
   font-size: 20px;
   cursor: pointer;
   position: absolute;
-  left: 16px;
+  left: 12px;
   z-index: 10;
 }
 .header-title {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  max-width: 50%;
   font-size: 17px;
   font-weight: 600;
   color: #333;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 .toggle-sidebar {
   cursor: pointer;
@@ -966,9 +1026,37 @@ function toggleSidebar() {
 }
 .input-area {
   padding: 1rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   background: #ffffff;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
+}
+
+/* 回到底部浮动按钮：当用户上滑查看历史且仍有新消息时显示 */
+.scroll-to-bottom {
+  position: fixed;
+  right: 16px;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #ffffff;
+  color: #1a5f7a;
+  border: 1px solid rgba(26, 95, 122, 0.25);
+  border-radius: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+.scroll-to-bottom:hover {
+  background: #f0f9fb;
+  transform: translateY(-1px);
+}
+.scroll-to-bottom .el-icon {
+  font-size: 14px;
 }
 .input-box-wrapper {
   display: flex;
@@ -1207,16 +1295,21 @@ function toggleSidebar() {
   .sidebar {
     position: fixed;
     left: 0;
-    top: 0;
+    top: env(safe-area-inset-top);
     bottom: 0;
-    z-index: 1000;
+    width: 240px;
+    z-index: 2000;
   }
   .sidebar-backdrop {
     display: block;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 999;
+    z-index: 1999;
+  }
+  /* 抽屉内标题栏避开状态栏 */
+  .sidebar-header {
+    padding-top: calc(16px + env(safe-area-inset-top));
   }
 }
 </style>
