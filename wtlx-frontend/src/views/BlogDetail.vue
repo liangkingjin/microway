@@ -25,24 +25,26 @@
         </div>
       </div>
       <div class="blog-text" v-html="blog.content"></div>
-      <div class="zan-box">
-        <div>
-          <svg t="1646634642977" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <!-- 点赞卡：桌面端由 margin-inline 走版心居中，移动端退化为 16px 边距 -->
+      <div class="zan-box wt-card">
+        <div class="zan-count" :class="{ 'is-liked': blog.isLike }" @click="addLike">
+          <svg t="1646634642977" class="icon zan-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
             <path d="M160 944c0 8.8-7.2 16-16 16h-32c-26.5 0-48-21.5-48-48V528c0-26.5 21.5-48 48-48h32c8.8 0 16 7.2 16 16v448zM96 416c-53 0-96 43-96 96v416c0 53 43 96 96 96h96c17.7 0 32-14.3 32-32V448c0-17.7-14.3-32-32-32H96zM505.6 64c16.2 0 26.4 8.7 31 13.9 4.6 5.2 12.1 16.3 10.3 32.4l-23.5 203.4c-4.9 42.2 8.6 84.6 36.8 116.4 28.3 31.7 68.9 49.9 111.4 49.9h271.2c6.6 0 10.8 3.3 13.2 6.1s5 7.5 4 14l-48 303.4c-6.9 43.6-29.1 83.4-62.7 112C815.8 944.2 773 960 728.9 960h-317c-33.1 0-59.9-26.8-59.9-59.9v-455c0-6.1 1.7-12 5-17.1 69.5-109 106.4-234.2 107-364h41.6z m0-64h-44.9C427.2 0 400 27.2 400 60.7c0 127.1-39.1 251.2-112 355.3v484.1c0 68.4 55.5 123.9 123.9 123.9h317c122.7 0 227.2-89.3 246.3-210.5l47.9-303.4c7.8-49.4-30.4-94.1-80.4-94.1H671.6c-50.9 0-90.5-44.4-84.6-95l23.5-203.4C617.7 55 568.7 0 505.6 0z" :fill="blog.isLike ? '#ff6633' : '#82848a'"></path>
           </svg>
+          <span class="zan-count__num">{{ blog.liked }}</span>
+          <span class="zan-count__unit">人点赞</span>
         </div>
-        <div class="zan-list">
-          <div class="user-icon-mini" v-for="u in likes" :key="u.id">
+        <div class="zan-avatars" v-if="likes.length">
+          <div class="zan-avatar" v-for="u in likes.slice(0, 6)" :key="u.id">
             <img :src="u.icon || '/imgs/icons/default-icon.jpg'" alt="">
           </div>
-          <div style="margin-left:10px;text-align: center;line-height: 24px;">{{ blog.liked }}人点赞</div>
+          <span class="zan-more" v-if="likes.length > 6">+{{ likes.length - 6 }}</span>
         </div>
       </div>
-      <div class="blog-divider"></div>
-      <div class="blog-comments">
+      <div class="blog-comments wt-card">
         <div class="comments-head">
-          <div>网友评价 <span>（{{ comments.length }}）</span></div>
-          <div><el-icon><ArrowRight /></el-icon></div>
+          <span class="comments-title">网友评价</span>
+          <span class="comments-count">{{ comments.length }}</span>
         </div>
         <!-- 评论输入框 -->
         <div class="comment-input-box">
@@ -80,9 +82,12 @@
               <img :src="comment.userIcon || '/imgs/icons/default-icon.jpg'" alt="">
             </div>
             <div class="comment-info">
-              <div class="comment-user">{{ comment.userName }} <span>Lv{{ comment.userLevel }}</span></div>
-              <div style="display: flex;" v-if="comment.score">
-                打分
+              <div class="comment-user">
+                <span>{{ comment.userName }}</span>
+                <span class="comment-user__level">Lv{{ comment.userLevel }}</span>
+              </div>
+              <div class="comment-score" v-if="comment.score">
+                <span class="comment-score__label">打分</span>
                 <el-rate disabled v-model="comment.score"></el-rate>
               </div>
               <div class="comment-content">{{ comment.content }}</div>
@@ -135,18 +140,16 @@
               </div>
             </div>
           </div>
-          <div v-if="comments.length > 0"
-            style="display: flex; justify-content: space-between;padding: 15px 0; border-top: 1px solid #f1f1f1; margin-top: 10px;">
-            <div>查看全部{{ comments.length }}条评价</div>
-            <div><el-icon><ArrowRight /></el-icon></div>
+          <div v-if="comments.length > 0" class="comment-more">
+            <span>查看全部 {{ comments.length }} 条评价</span>
+            <el-icon><ArrowRight /></el-icon>
           </div>
-          <div v-else class="no-comments">
-            <el-icon style="font-size:48px;color:#8ecae6;opacity:.5;"><ChatDotRound /></el-icon>
-            <p>暂无评论，快来发表第一条评论吧</p>
+          <div v-else class="wt-empty">
+            <el-icon class="wt-empty__icon"><ChatDotRound /></el-icon>
+            <p class="wt-empty__text">暂无评论，快来发表第一条评论吧</p>
           </div>
         </div>
       </div>
-      <div class="blog-divider"></div>
     </div>
     <div class="foot">
       <div class="foot-box">
@@ -586,6 +589,12 @@ function go(index) {
 
 <style scoped>
 /* 样式合并自原 blog-detail.html <style> 内联块 + css/blog-detail.css，body/#app 全局重置不迁移 */
+.page-container {
+  /* 本页强调色统一走令牌；soft 是同色的低透明度底（令牌里没有半透明变体），
+     用于标签底、图标底这类"淡色块"，避免各处再写散落的 rgba 字面量 */
+  --bd-accent: var(--wt-color-brand-tint);
+  --bd-accent-soft: rgba(142, 202, 230, 0.12);
+}
 .page-scroll {
   height: calc(100vh - 56px);
   overflow-y: auto;
@@ -620,7 +629,7 @@ function go(index) {
 .basic {
   display: flex;
   align-items: center;
-  padding: 16px;
+  padding: var(--wt-space-4) var(--wt-gutter);
   background: #fff;
   position: relative;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
@@ -675,9 +684,9 @@ function go(index) {
   background: rgba(142, 202, 230, 0.2);
 }
 .blog-text {
-  padding: 20px 16px;
+  padding: var(--wt-space-5) var(--wt-gutter);
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.7;
   color: #333;
   background: #fff;
 }
@@ -687,86 +696,153 @@ function go(index) {
   margin: 10px 0;
   display: block;
 }
+/* ==========================================================================
+   点赞区
+   ------------------------------------------------------------------------
+   左"图标 + 计数"为一个可点整体，右为头像叠压组，两端对齐且各自成组；
+   计数用 tabular-nums 等宽数字，加一减一时数字不会左右抖动。
+   ========================================================================== */
 .zan-box {
-  padding: 16px;
-  background: #fff;
-  margin-top: 10px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
+  gap: var(--wt-space-3);
+  margin: var(--wt-space-4) var(--wt-gutter) 0;
+  padding: var(--wt-space-4);
 }
-.zan-list {
+.zan-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wt-space-2);
+  padding: var(--wt-space-2) var(--wt-space-3);
+  border-radius: var(--wt-radius-pill);
+  background: var(--wt-bg-muted);
+  color: var(--wt-text-2);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.zan-count:hover {
+  background: var(--bd-accent-soft);
+}
+.zan-count:active {
+  transform: scale(0.97);
+}
+.zan-count.is-liked {
+  color: #ff6633;
+  background: rgba(255, 102, 51, 0.1);
+}
+.zan-icon {
+  display: block;
+  flex: none;
+}
+.zan-count__num {
+  font-size: var(--wt-fs-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.zan-count__unit {
+  font-size: var(--wt-fs-sm);
+}
+/* 头像叠压成一组，超出部分用 +N 收口，避免点赞人多时把这一行撑爆 */
+.zan-avatars {
   display: flex;
   align-items: center;
-  margin-top: 12px;
-  flex-wrap: wrap;
+  flex: none;
 }
-.user-icon-mini {
-  width: 32px;
-  height: 32px;
+.zan-avatar {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   overflow: hidden;
-  margin-right: 8px;
-  margin-bottom: 8px;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 2px solid var(--wt-bg-surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
-.user-icon-mini img {
+.zan-avatar + .zan-avatar,
+.zan-more {
+  margin-left: -8px;
+}
+.zan-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
-.blog-divider {
-  height: 8px;
-  background: #f8f8f8;
+.zan-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--wt-bg-surface);
+  background: var(--wt-bg-muted);
+  color: var(--wt-text-3);
+  font-size: var(--wt-fs-xs);
 }
+/* ==========================================================================
+   评论区
+   ------------------------------------------------------------------------
+   与点赞卡同走 margin-inline 版心；卡片间距统一 --wt-space-4，
+   底部预留固定操作栏的高度，避免最后一条评论被遮挡。
+   ========================================================================== */
 .blog-comments {
-  background: #fff;
-  margin-top: 10px;
-  padding: 16px;
-  border-radius: 12px;
+  margin: var(--wt-space-4) var(--wt-gutter) var(--wt-page-bottom);
+  padding: var(--wt-space-4);
 }
 .comments-head {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
+  align-items: baseline;
+  gap: var(--wt-space-2);
+  margin-bottom: var(--wt-space-4);
 }
-.comments-head span {
-  color: #999;
-  font-weight: normal;
-  margin-left: 4px;
+.comments-title {
+  font-size: var(--wt-fs-lg);
+  font-weight: 600;
+  color: var(--wt-text-1);
+}
+.comments-count {
+  font-size: var(--wt-fs-sm);
+  color: var(--wt-text-3);
+}
+/* ---- 评论项 ---- */
+/* 头像与内容用 gap 对齐；分条交给分隔线，不再靠各处不等的 margin 区分 */
+.comment-list {
+  margin-top: var(--wt-space-4);
 }
 .comment-box {
   display: flex;
-  margin-bottom: 20px;
-  position: relative;
+  align-items: flex-start;
+  gap: var(--wt-space-3);
+}
+.comment-box + .comment-box {
+  margin-top: var(--wt-space-4);
+  padding-top: var(--wt-space-4);
+  border-top: 1px solid var(--wt-border);
 }
 .comment-icon {
   width: 36px;
   height: 36px;
   border-radius: 50%;
   overflow: hidden;
-  margin-right: 12px;
-  flex-shrink: 0;
+  flex: none;
 }
 .comment-icon img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
+/* ---- 发表评论 ---- */
+/* 淡色底 + 描边与白卡拉开层级：原先是"白底叠白底"，只剩阴影可辨 */
 .comment-input-box {
   display: flex;
-  margin: 15px 0;
-  padding: 16px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  align-items: flex-start;
+  gap: var(--wt-space-3);
+  padding: var(--wt-space-3);
+  border: 1px solid var(--wt-border);
+  border-radius: var(--wt-radius-sm);
+  background: var(--wt-bg-muted);
   animation: slideUp 0.3s ease;
 }
 .comment-input-avatar {
@@ -774,227 +850,292 @@ function go(index) {
   height: 36px;
   border-radius: 50%;
   overflow: hidden;
-  margin-right: 12px;
-  flex-shrink: 0;
+  flex: none;
 }
 .comment-input-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 .comment-input-content {
   flex: 1;
+  min-width: 0;
 }
 .comment-input-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--wt-space-3);
+  margin-top: var(--wt-space-2);
 }
 .comment-info {
   flex: 1;
+  min-width: 0;
 }
 .comment-user {
-  font-size: 15px;
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: var(--wt-space-2);
+  font-size: var(--wt-fs-md);
+  font-weight: 600;
+  color: var(--wt-text-1);
+  line-height: 1.4;
 }
-.comment-user span {
-  font-size: 12px;
-  color: #8ecae6;
-  background: rgba(142, 202, 230, 0.1);
-  padding: 2px 6px;
-  border-radius: 10px;
-  margin-left: 8px;
+.comment-user__level {
+  padding: 1px var(--wt-space-2);
+  border-radius: var(--wt-radius-pill);
+  font-size: var(--wt-fs-xs);
+  font-weight: 500;
+  color: var(--bd-accent);
+  background: var(--bd-accent-soft);
+}
+.comment-score {
+  display: flex;
+  align-items: center;
+  gap: var(--wt-space-2);
+  margin-top: var(--wt-space-2);
+  font-size: var(--wt-fs-sm);
+  color: var(--wt-text-3);
 }
 .comment-content {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #666;
-  margin: 8px 0;
+  margin-top: var(--wt-space-2);
+  font-size: var(--wt-fs-md);
+  line-height: 1.7;
+  color: var(--wt-text-2);
+  word-break: break-word;
 }
 .comment-images {
   display: flex;
-  width: 100%;
-  overflow-x: scroll;
-  padding: 10px 0;
+  gap: var(--wt-space-2);
+  margin-top: var(--wt-space-2);
+  overflow-x: auto;
+  padding-bottom: var(--wt-space-1);
 }
 .comment-images img {
-  height: 94px;
-  width: 92px;
-  border-radius: 5px;
-  margin-right: 5px;
+  flex: none;
+  width: 88px;
+  height: 88px;
+  border-radius: var(--wt-radius-sm);
+  object-fit: cover;
 }
 .comment-actions {
   display: flex;
   align-items: center;
-  font-size: 12px;
-  color: #999;
-  margin-top: 8px;
+  gap: var(--wt-space-4);
+  margin-top: var(--wt-space-2);
+  font-size: var(--wt-fs-xs);
+  color: var(--wt-text-3);
 }
-.comment-time {
-  margin-right: 16px;
-}
-.comment-reply-btn {
-  color: #8ecae6;
+.comment-reply-btn,
+.reply-btn {
+  color: var(--bd-accent);
+  font-weight: 500;
   cursor: pointer;
 }
+.comment-reply-btn:hover,
+.reply-btn:hover {
+  color: var(--wt-color-brand);
+}
+/* ---- 回复 ---- */
+/* 整体缩进 + 淡色底，与主评论形成明确的父子层次；回复之间用分隔线分条 */
 .reply-list {
-  background: #f8f8f8;
-  padding: 12px;
-  margin-top: 12px;
-  border-radius: 8px;
+  margin-top: var(--wt-space-3);
+  padding: var(--wt-space-3);
+  border-radius: var(--wt-radius-sm);
+  background: var(--wt-bg-muted);
 }
-.reply-item {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
-}
-.reply-item:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
+.reply-item + .reply-item {
+  margin-top: var(--wt-space-3);
+  padding-top: var(--wt-space-3);
+  border-top: 1px solid var(--wt-border);
 }
 .reply-user {
-  font-size: 13px;
-  margin-bottom: 4px;
-  color: #666;
+  font-size: var(--wt-fs-sm);
+  line-height: 1.5;
+  color: var(--wt-text-2);
 }
 .reply-username,
 .reply-to-username {
-  color: #8ecae6;
-  font-weight: 500;
+  color: var(--bd-accent);
+  font-weight: 600;
 }
 .reply-content {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #333;
-  word-break: break-all;
+  margin-top: var(--wt-space-1);
+  font-size: var(--wt-fs-md);
+  line-height: 1.7;
+  color: var(--wt-text-1);
+  word-break: break-word;
 }
 .reply-images {
   display: flex;
   flex-wrap: wrap;
-  margin: 8px 0;
+  gap: var(--wt-space-2);
+  margin-top: var(--wt-space-2);
 }
 .reply-images img {
   width: 64px;
   height: 64px;
+  border-radius: var(--wt-radius-sm);
   object-fit: cover;
-  margin-right: 8px;
-  margin-bottom: 8px;
-  border-radius: 8px;
 }
 .reply-actions {
   display: flex;
   align-items: center;
-  font-size: 12px;
-  color: #999;
-  margin-top: 8px;
-}
-.reply-btn {
-  color: #8ecae6;
-  cursor: pointer;
+  gap: var(--wt-space-4);
+  margin-top: var(--wt-space-2);
+  font-size: var(--wt-fs-xs);
+  color: var(--wt-text-3);
 }
 .reply-input-box {
-  margin-top: 12px;
-  padding: 12px;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid rgba(0,0,0,0.05);
+  margin-top: var(--wt-space-3);
+  padding: var(--wt-space-3);
+  border: 1px solid var(--wt-border);
+  border-radius: var(--wt-radius-sm);
+  background: var(--wt-bg-surface);
 }
+/* 原模板有 .reply-input-actions 这个类名但一直没有样式，
+   导致回复框里的"上传图标 / 回复按钮"是一段普通块级流，这里补上对齐规则 */
+.reply-input-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wt-space-3);
+  margin-top: var(--wt-space-2);
+}
+/* ---- 图片上传 ---- */
 .upload-images {
   display: flex;
   align-items: center;
-  margin-top: 12px;
+  gap: var(--wt-space-2);
+  min-width: 0;
 }
 .upload-images .el-icon {
-  font-size: 20px;
-  color: #8ecae6;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  color: var(--bd-accent);
   cursor: pointer;
-  padding: 8px;
   border-radius: 50%;
-  background: rgba(142, 202, 230, 0.1);
+  background: var(--wt-bg-surface);
+  transition: background-color 0.2s ease;
+}
+.upload-images .el-icon:hover {
+  background: var(--bd-accent-soft);
 }
 .preview-images {
   display: flex;
-  flex-wrap: wrap;
-  margin-left: 12px;
+  align-items: center;
+  gap: var(--wt-space-2);
+  min-width: 0;
+  overflow-x: auto;
 }
 .preview-image-item {
+  position: relative;
+  flex: none;
   width: 48px;
   height: 48px;
-  margin-right: 8px;
-  margin-bottom: 8px;
-  position: relative;
-  border-radius: 8px;
+  border-radius: var(--wt-radius-sm);
   overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 .preview-image-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 .preview-close {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 2px;
+  right: 2px;
+  padding: 2px;
+  border-radius: 50%;
   background: rgba(0,0,0,0.5);
   color: #fff;
   font-size: 12px;
   cursor: pointer;
 }
-.no-comments {
-  text-align: center;
-  padding: 40px 0;
-  color: #999;
-}
-.no-comments p {
-  font-size: 14px;
-}
+/* ==========================================================================
+   底部固定操作栏
+   ------------------------------------------------------------------------
+   注意：main.css 里有一套全局底部导航栏（同款 tabbar）也占用了
+   .foot / .foot-box / .foot-view 这三个类名，那套是 display:flex + flex:1 +
+   水平居中。这里必须显式覆盖，否则本页的点赞按钮会浮到屏幕正中、且高度被锁死 50px。
+   ========================================================================== */
 .foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: auto;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 -1px 3px rgba(0,0,0,0.05);
   z-index: 100;
+  padding: var(--wt-space-2) var(--wt-gutter);
+  padding-bottom: calc(var(--wt-space-2) + env(safe-area-inset-bottom, 0px));
+  background: var(--wt-bg-surface);
+  box-shadow: 0 -1px 3px rgba(0,0,0,0.05);
 }
 .foot-box {
+  /* 全局那套同时给了 flex:1 / width:20% / flex-direction:column / align-items:center，
+     结果是按钮即便靠左了，也会在这个 20% 宽的盒子里被再居中一次，必须逐项覆盖 */
+  flex: none;
+  width: auto;
+  flex-direction: row;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
 }
 .foot-view {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: #f8f8f8;
+  gap: var(--wt-space-2);
+  height: 36px;
+  padding: 0 var(--wt-space-4);
+  border-radius: var(--wt-radius-pill);
+  background: var(--wt-bg-muted);
+  font-size: var(--wt-fs-md);
+  color: var(--wt-text-2);
   cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
-.foot-view span {
-  font-size: 14px;
-  color: #666;
-  margin-left: 6px;
+.foot-view:hover {
+  background: var(--bd-accent-soft);
+}
+.foot-view:active {
+  transform: scale(0.97);
 }
 .foot-view span.liked {
   color: #ff6633;
 }
+/* ---- 评论卡底部的"查看全部" ---- */
+.comment-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wt-space-2);
+  margin-top: var(--wt-space-4);
+  padding-top: var(--wt-space-3);
+  border-top: 1px solid var(--wt-border);
+  font-size: var(--wt-fs-sm);
+  color: var(--wt-text-3);
+  cursor: pointer;
+}
 :deep(.el-textarea__inner) {
   border: none;
-  background: #f8f8f8;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 14px;
+  box-shadow: none;
+  background: var(--wt-bg-surface);
+  border-radius: var(--wt-radius-sm);
+  padding: var(--wt-space-3);
+  font-size: var(--wt-fs-md);
   resize: none;
 }
 :deep(.el-rate) {
   display: inline-flex;
-  margin-left: 8px;
+  height: auto;
+  line-height: 1;
 }
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -1003,5 +1144,28 @@ function go(index) {
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+/* ---- 窄屏：收紧内边距与图元尺寸 ---- */
+@media (max-width: 480px) {
+  .zan-box,
+  .blog-comments {
+    padding: var(--wt-space-3);
+  }
+  .comment-input-box {
+    padding: var(--wt-space-2);
+  }
+  .comment-icon,
+  .comment-input-avatar {
+    width: 32px;
+    height: 32px;
+  }
+  .comment-images img {
+    width: 72px;
+    height: 72px;
+  }
+  .reply-images img {
+    width: 56px;
+    height: 56px;
+  }
 }
 </style>
