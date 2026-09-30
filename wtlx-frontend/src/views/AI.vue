@@ -128,9 +128,28 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import MarkdownIt from 'markdown-it'
 import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/ai'
 import ThinkingPanel from '../components/chat/ThinkingPanel.vue'
 import BlogCardGrid from '../components/chat/BlogCardGrid.vue'
+
+// html:false —— 模型输出不可信，禁止原始 HTML 透传（v-html 下的 XSS 面）
+// linkify:true —— 裸 URL 自动成链接；breaks:true —— 单换行视为 <br>，契合行程文本的排版习惯
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  typographer: false
+})
+
+// 外链新窗口打开，并阻断 tabnabbing
+const defaultLinkOpen = md.renderer.rules.link_open
+  || ((tokens, idx, opts, _env, self) => self.renderToken(tokens, idx, opts))
+md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
+  tokens[idx].attrSet('target', '_blank')
+  tokens[idx].attrSet('rel', 'noopener noreferrer')
+  return defaultLinkOpen(tokens, idx, opts, env, self)
+}
 
 const router = useRouter()
 
@@ -177,18 +196,13 @@ watch(inputMessage, () => {
 
 function renderMarkdown(text) {
   if (!text) return ''
-  let html = text
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    // 列表块须先于斜体处理：连续的 "- xxx" 行整体包成 <ul>
-    .replace(/((?:^[-*] .+$\n?)+)/gm, (block) =>
-      '<ul>' + block.replace(/^[-*] (.+)$/gm, '<li>$1</li>') + '</ul>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
-  return html
+  // 流式到达时代码块围栏可能尚未闭合，补一个收尾，避免其后内容被整段吞进 <pre>
+  let source = text
+  const fences = (source.match(/^```/gm) || []).length
+  if (fences % 2 === 1) {
+    source += '\n```'
+  }
+  return md.render(source)
 }
 
 // SSE data 兼容解析：新协议为 JSON，解析失败时按纯文本兜底
@@ -312,20 +326,20 @@ async function loadHistory(threadId) {
   if (!threadId) return
   try {
     const data = await fetchHistory(threadId)
-    // 响应结构: { threadId, context: [{role, content}] }，过滤系统/工具消息
-    const context = (data && data.context) || []
-    const history = context.filter(m => m.role === 'USER' || m.role === 'ASSISTANT')
+    // 响应结构: { threadId, messages: [{role, content, cards, time}] }
+    const history = ((data && data.messages) || [])
+      .filter(m => m.role === 'USER' || m.role === 'ASSISTANT')
     if (history.length === 0) {
       messages.value = []
       return
     }
-    // 历史只存结论正文（思考步骤与卡片不落库），故这两项恢复为空集合
+    // 正文与检索卡片均已落库，此处一并恢复；思考过程不落库，恢复为空
     messages.value = history.map(m => ({
       content: m.content || '',
       isUser: m.role === 'USER',
-      time: Date.now(),
+      time: m.time ? new Date(m.time).getTime() : Date.now(),
       thinking: [],
-      cards: []
+      cards: Array.isArray(m.cards) ? m.cards : []
     }))
     nextTick(() => scrollToBottom())
   } catch (err) {
@@ -879,6 +893,10 @@ function toggleSidebar() {
   gap: 0.25rem;
   max-width: 70%;
 }
+/* 回答消息承载完整行程方案，阅读区域需要更宽 */
+.ai-message-row .message-body {
+  max-width: min(860px, 82%);
+}
 .bubble {
   padding: 1rem 1.5rem;
   border-radius: 1rem;
@@ -892,6 +910,10 @@ function toggleSidebar() {
   border-bottom-left-radius: 0.375rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.08);
+  /* 正文区放宽：字号、行高与内边距同步放大，长行程更易读 */
+  padding: 1.25rem 1.75rem;
+  font-size: 15px;
+  line-height: 1.85;
 }
 .user-bubble {
   background: linear-gradient(135deg, #1a5f7a, #2d7a99);
@@ -1078,6 +1100,66 @@ function toggleSidebar() {
   color: #1a5f7a;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
+/* ---- Markdown 渲染内容的排版 ---- */
+.bubble :deep(p) {
+  margin: 0 0 0.75em;
+}
+.bubble :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.bubble :deep(h1),
+.bubble :deep(h2),
+.bubble :deep(h3),
+.bubble :deep(h4) {
+  margin: 1.1em 0 0.5em;
+  color: #1a5f7a;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.bubble :deep(h1) { font-size: 1.3em; }
+.bubble :deep(h2) { font-size: 1.2em; }
+.bubble :deep(h3) { font-size: 1.1em; }
+.bubble :deep(h4) { font-size: 1em; }
+/* 首个标题不额外留白，避免气泡顶部空一块 */
+.bubble :deep(> :first-child) {
+  margin-top: 0;
+}
+.bubble :deep(ul),
+.bubble :deep(ol) {
+  padding-left: 1.4em;
+  margin: 0 0 0.75em;
+}
+.bubble :deep(li) {
+  margin-bottom: 0.35em;
+}
+.bubble :deep(li > ul),
+.bubble :deep(li > ol) {
+  margin: 0.35em 0 0;
+}
+.bubble :deep(a) {
+  color: #1a5f7a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bubble :deep(a:hover) {
+  color: #2d7a99;
+}
+.bubble :deep(strong) {
+  font-weight: 600;
+  color: #14394a;
+}
+.bubble :deep(blockquote) {
+  margin: 0.75em 0;
+  padding: 0.25em 0 0.25em 0.9em;
+  border-left: 3px solid #b8d8e4;
+  color: #4a5568;
+  background: #f7fbfc;
+}
+.bubble :deep(hr) {
+  border: none;
+  border-top: 1px solid #e8edf2;
+  margin: 1em 0;
+}
 .bubble :deep(pre) {
   background-color: #2d2d2d;
   color: #f8f8f2;
@@ -1091,11 +1173,21 @@ function toggleSidebar() {
   background-color: rgba(0,0,0,0.05);
   padding: 2px 4px;
   border-radius: 3px;
+  font-size: 0.9em;
+}
+/* 代码块内的 code 不再叠加行内样式，否则底色与内边距冲突 */
+.bubble :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.9em;
 }
 .bubble :deep(table) {
   border-collapse: collapse;
   width: 100%;
   margin: 10px 0;
+  display: block;
+  overflow-x: auto;
 }
 .bubble :deep(th),
 .bubble :deep(td) {
@@ -1105,21 +1197,6 @@ function toggleSidebar() {
 }
 .bubble :deep(th) {
   background-color: #f2f2f2;
-}
-.bubble :deep(ul),
-.bubble :deep(ol) {
-  padding-left: 20px;
-}
-.bubble :deep(li) {
-  margin-bottom: 5px;
-}
-.bubble :deep(h1),
-.bubble :deep(h2),
-.bubble :deep(h3),
-.bubble :deep(h4) {
-  margin-top: 16px;
-  margin-bottom: 8px;
-  color: #333;
 }
 
 /* 移动端：侧边栏以抽屉形式浮出，并加遮罩 */

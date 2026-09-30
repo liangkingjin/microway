@@ -90,14 +90,22 @@ public class ConversationMemoryServiceImpl implements ConversationMemoryService 
     }
 
     @Override
-    public void appendAndCompressIfNeeded(String conversationId, String userMessage, String assistantReply) {
+    public void appendAndCompressIfNeeded(String conversationId, String userMessage,
+                                          String assistantReply, String assistantCardsJson) {
         // 1. 保存用户消息
-        saveMessage(conversationId, MessageRole.USER, userMessage);
-        // 2. 保存助手回复
-        saveMessage(conversationId, MessageRole.ASSISTANT, assistantReply);
+        saveMessage(conversationId, MessageRole.USER, userMessage, null);
+        // 2. 保存助手回复（连同检索卡片，供重新进入会话时恢复展示）
+        saveMessage(conversationId, MessageRole.ASSISTANT, assistantReply, assistantCardsJson);
 
         // 3. 异步检查是否需要压缩
         CompletableFuture.runAsync(() -> doCompressIfNeeded(conversationId));
+    }
+
+    @Override
+    public List<ConversationMessage> loadRecentMessages(String conversationId, int limit) {
+        List<ConversationMessage> recent = messageMapper.findRecentByConversationId(conversationId, limit);
+        Collections.reverse(recent);
+        return recent;
     }
 
     @Override
@@ -110,11 +118,12 @@ public class ConversationMemoryServiceImpl implements ConversationMemoryService 
     /**
      * 保存单条消息
      */
-    private void saveMessage(String conversationId, MessageRole role, String content) {
+    private void saveMessage(String conversationId, MessageRole role, String content, String cardsJson) {
         ConversationMessage message = new ConversationMessage();
         message.setConversationId(conversationId);
         message.setRole(role);
         message.setContent(content);
+        message.setCardsJson(cardsJson);
         message.setCreatedAt(java.time.LocalDateTime.now());
         messageMapper.insert(message);
     }

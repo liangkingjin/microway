@@ -29,6 +29,12 @@ public class ConversationMessage {
     private String content;
 
     /**
+     * 助手消息附带的检索卡片（TripCardVO 的 JSON 数组）。
+     * 用户消息为 null。用于重新进入会话时恢复"文字正文 + 游记卡片"的混合展示。
+     */
+    private String cardsJson;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;

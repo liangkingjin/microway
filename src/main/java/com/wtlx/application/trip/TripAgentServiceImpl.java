@@ -280,7 +280,9 @@ public class TripAgentServiceImpl implements TripAgentService {
                 }
             } finally {
                 if (!answer.isEmpty()) {
-                    memoryService.appendAndCompressIfNeeded(conversationId, message, answer.toString());
+                    // 卡片随正文一起落库，重新进入会话时才能恢复"正文 + 游记卡片"的展示
+                    memoryService.appendAndCompressIfNeeded(
+                            conversationId, message, answer.toString(), toJson(cardsRef.get()));
                 }
                 ConversationContextHolder.clear();
                 generationRegistry.unregister(requestId);
@@ -318,6 +320,21 @@ public class TripAgentServiceImpl implements TripAgentService {
         router.addStep("retrieval", "检索结果",
                 cards.isEmpty() ? "未命中相关内容" : "命中 " + cards.size() + " 条相关内容");
         return cards;
+    }
+
+    /**
+     * 卡片列表序列化为 JSON；空列表与序列化失败都返回 null（表示该消息无卡片）
+     */
+    private String toJson(List<TripCardVO> cards) {
+        if (cards == null || cards.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(cards);
+        } catch (Exception e) {
+            log.warn("卡片序列化失败，本次不落库卡片: {}", e.getMessage());
+            return null;
+        }
     }
 
     private TripAnswerVO buildPayload(String content, List<ThinkingStepVO> steps, List<TripCardVO> cards) {

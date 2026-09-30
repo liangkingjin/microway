@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS conversation_message (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 助手消息附带的检索卡片（TripCardVO 的 JSON 数组），用于重新进入会话时恢复卡片展示
+ALTER TABLE conversation_message ADD COLUMN IF NOT EXISTS cards_json TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_conversation_message_conv_created
     ON conversation_message (conversation_id, created_at);
 

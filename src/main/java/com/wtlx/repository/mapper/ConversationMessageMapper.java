@@ -26,6 +26,7 @@ public class ConversationMessageMapper {
         msg.setConversationId(rs.getString("conversation_id"));
         msg.setRole(MessageRole.fromCode(rs.getString("role")));
         msg.setContent(rs.getString("content"));
+        msg.setCardsJson(rs.getString("cards_json"));
         Timestamp ts = rs.getTimestamp("created_at");
         if (ts != null) {
             msg.setCreatedAt(ts.toLocalDateTime());
@@ -61,9 +62,9 @@ public class ConversationMessageMapper {
 
     public void insert(ConversationMessage message) {
         jdbcTemplate.update(
-                "INSERT INTO conversation_message (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+                "INSERT INTO conversation_message (conversation_id, role, content, cards_json, created_at) VALUES (?, ?, ?, ?, ?)",
                 message.getConversationId(), message.getRole().getCode(), message.getContent(),
-                Timestamp.valueOf(message.getCreatedAt()));
+                message.getCardsJson(), Timestamp.valueOf(message.getCreatedAt()));
     }
 
     public void deleteByConversationId(String conversationId) {
