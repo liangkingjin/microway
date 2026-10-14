@@ -26,9 +26,6 @@ import java.util.List;
 @Component
 public class VectorMemoryPath implements MemoryPath {
 
-    /**
-     * 查询向量在检索服务里统一计算一次，四路共用，避免重复 embedding 计费
-     */
     private static final String PATH_NAME = "vector";
 
     @Resource

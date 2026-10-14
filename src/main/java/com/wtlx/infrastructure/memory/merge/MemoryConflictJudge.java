@@ -6,6 +6,7 @@ import com.wtlx.domain.entity.memory.MemoryCandidate;
 import com.wtlx.domain.entity.memory.ScoredMemory;
 import com.wtlx.domain.entity.memory.enums.MemoryDecision;
 import com.wtlx.infrastructure.memory.config.MemoryProperties;
+import com.wtlx.infrastructure.memory.support.JsonTexts;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -143,18 +144,17 @@ public class MemoryConflictJudge {
         }
         try {
             JsonNode node = objectMapper.readTree(json);
-            MemoryDecision decision = MemoryDecision.fromCode(text(node, "decision"));
+            MemoryDecision decision = MemoryDecision.fromCode(JsonTexts.text(node, "decision"));
             int targetIndex = index(node.get("target"), existingCount);
-            String reason = text(node, "reason");
-            String merged = text(node, "merged");
+            String reason = JsonTexts.text(node, "reason");
+            // merged 只在 UPDATE 有意义；其余决策与"给了空串"一律归一为 null，下游无需再做空值判断
+            String rawMerged = JsonTexts.text(node, "merged");
+            String merged = StringUtils.hasText(rawMerged) ? rawMerged.trim() : null;
 
             // 除 ADD 外都必须有明确目标，否则决策无法落地，退化为 ADD 更安全
             if (decision != MemoryDecision.ADD && targetIndex < 0) {
                 log.debug("冲突判定未给出有效 target，退化为 ADD");
                 return new Verdict(MemoryDecision.ADD, -1, "判定缺失目标，退化新增", null);
-            }
-            if (decision == MemoryDecision.UPDATE && !StringUtils.hasText(merged)) {
-                return new Verdict(MemoryDecision.UPDATE, targetIndex, reason, null);
             }
             if (decision == MemoryDecision.ADD) {
                 targetIndex = -1;
@@ -166,19 +166,11 @@ public class MemoryConflictJudge {
         }
     }
 
+    /**
+     * 截出最外层的 {@code { }} 片段；围栏剥离复用 {@link JsonTexts}，与抽取侧同一套口径
+     */
     private String extractJsonObject(String raw) {
-        String text = raw.trim();
-        if (text.startsWith("```")) {
-            int newline = text.indexOf('\n');
-            if (newline > 0) {
-                text = text.substring(newline + 1);
-            }
-            int end = text.lastIndexOf("```");
-            if (end >= 0) {
-                text = text.substring(0, end);
-            }
-            text = text.trim();
-        }
+        String text = JsonTexts.stripCodeFence(raw);
         int start = text.indexOf('{');
         int end = text.lastIndexOf('}');
         if (start < 0 || end <= start) {
@@ -206,13 +198,5 @@ public class MemoryConflictJudge {
         }
         int zeroBased = raw - 1;
         return (zeroBased >= 0 && zeroBased < existingCount) ? zeroBased : -1;
-    }
-
-    private String text(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        if (value == null || value.isNull()) {
-            return null;
-        }
-        return value.isTextual() ? value.asText() : value.toString();
     }
 }

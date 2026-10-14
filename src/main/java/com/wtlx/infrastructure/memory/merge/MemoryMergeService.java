@@ -122,11 +122,6 @@ public class MemoryMergeService {
             });
             return sb.append('}').toString();
         }
-
-        public int count(MemoryDecision decision) {
-            Integer value = counts.get(decision);
-            return value == null ? 0 : value;
-        }
     }
 
     /**
@@ -186,7 +181,8 @@ public class MemoryMergeService {
         if (exact != null) {
             userMemoryMapper.confirm(exact.getId(), candidate.getConfidence(), candidate.getEvidence());
             record(counts, MemoryDecision.NOOP);
-            logEvent(subjectKey, sourceRef, MemoryDecision.NOOP, candidate, exact.getContent(), exact.getContent(),
+            logEvent(subjectKey, sourceRef, MemoryDecision.NOOP, candidate, key,
+                    exact.getContent(), exact.getContent(),
                     "去重键一致，判定为重复信息，仅巩固置信度", exact.getMemoryId());
             return;
         }
@@ -199,8 +195,8 @@ public class MemoryMergeService {
         List<ScoredMemory> related = unionRelated(sameSlot, nearBy);
         double bestSimilarity = nearBy.isEmpty() ? 0D : nearBy.get(0).pathScore();
 
-        // 4. 决策
-        Decision decision = decide(candidate, sameSlot, nearBy, related, bestSimilarity);
+        // 4. 决策（复用上面已算好的 content，避免再次 trim）
+        Decision decision = decide(candidate, content, sameSlot, nearBy, related, bestSimilarity);
 
         // 5. 落地
         apply(subjectKey, sourceRef, candidate, key, content, contentHash, dedupKey, literal, decision);
@@ -220,11 +216,11 @@ public class MemoryMergeService {
 
     /**
      * 三级判定：规则 → 灰区交模型 → 兜底保守新增
+     *
+     * @param content 已 trim 的候选内容（调用方算好传入，避免本方法再次 trim）
      */
-    private Decision decide(MemoryCandidate candidate, List<UserMemory> sameSlot,
+    private Decision decide(MemoryCandidate candidate, String content, List<UserMemory> sameSlot,
                             List<ScoredMemory> nearBy, List<ScoredMemory> related, double bestSimilarity) {
-        String content = candidate.getContent().trim();
-
         // 分支一：存在同槽位记忆 —— 槽位相同即"同一件事"的强信号，交模型裁决
         if (!sameSlot.isEmpty()) {
             MemoryConflictJudge.Verdict verdict = memoryConflictJudge.judge(candidate, related);
@@ -296,7 +292,7 @@ public class MemoryMergeService {
                         Math.max(target.getConfidence(), candidate.getConfidence()),
                         Math.max(target.getImportance(), candidate.getImportance()),
                         nextVersion, candidate.getEvidence());
-                logEvent(subjectKey, sourceRef, MemoryDecision.UPDATE, candidate,
+                logEvent(subjectKey, sourceRef, MemoryDecision.UPDATE, candidate, key,
                         target.getContent(), decision.content(), decision.reason(), target.getMemoryId());
             }
 
@@ -306,7 +302,7 @@ public class MemoryMergeService {
                         dedupKey, literal, decision.reason());
                 if (newMemoryId != null) {
                     userMemoryMapper.supersede(target.getId(), newMemoryId);
-                    logEvent(subjectKey, sourceRef, MemoryDecision.SUPERSEDE, candidate,
+                    logEvent(subjectKey, sourceRef, MemoryDecision.SUPERSEDE, candidate, key,
                             target.getContent(), content, decision.reason(), newMemoryId);
                 }
             }
@@ -314,7 +310,7 @@ public class MemoryMergeService {
             case FORGET -> {
                 UserMemory target = decision.target();
                 userMemoryMapper.expire(target.getId());
-                logEvent(subjectKey, sourceRef, MemoryDecision.FORGET, candidate,
+                logEvent(subjectKey, sourceRef, MemoryDecision.FORGET, candidate, key,
                         target.getContent(), null, decision.reason(), target.getMemoryId());
             }
 
@@ -323,13 +319,15 @@ public class MemoryMergeService {
                 if (target != null) {
                     userMemoryMapper.confirm(target.getId(), candidate.getConfidence(), candidate.getEvidence());
                 }
-                logEvent(subjectKey, sourceRef, MemoryDecision.NOOP, candidate,
+                logEvent(subjectKey, sourceRef, MemoryDecision.NOOP, candidate, key,
                         target == null ? null : target.getContent(),
                         target == null ? null : target.getContent(), decision.reason(),
                         target == null ? null : target.getMemoryId());
             }
 
-            default -> log.warn("未知记忆决策，忽略: {}", decision.decision());
+            // CLEANUP 只由清理任务产生，永远不会走到抽取合并流程；显式列出而非 default，
+            // 这样将来新增决策枚举项时编译器会立刻报错，不会被静默忽略
+            case CLEANUP -> log.warn("批量清理决策不应出现在抽取合并流程，忽略: {}", decision.decision());
         }
     }
 
@@ -361,7 +359,7 @@ public class MemoryMergeService {
         memory.setEmbeddingLiteral(literal);
         try {
             userMemoryMapper.insert(memory);
-            logEvent(subjectKey, sourceRef, MemoryDecision.ADD, candidate, null, content, reason, memoryId);
+            logEvent(subjectKey, sourceRef, MemoryDecision.ADD, candidate, key, null, content, reason, memoryId);
             return memoryId;
         } catch (DataIntegrityViolationException e) {
             // 跨实例并发下另一个线程刚写入了同一条记忆：唯一索引拦住了，等价于 NOOP
@@ -400,16 +398,20 @@ public class MemoryMergeService {
     }
 
     /**
-     * 追加审计事件（失败不影响主流程）
+     * 追加审计事件（失败不影响主流程）。
+     *
+     * @param key 已归一化的槽位键，由调用方传入——此前本方法自己再归一化一次，
+     *            与 {@link #applyOne} 里的归一化重复计算，且两次归一化的入参口径一旦
+     *            被改动就可能不一致
      */
     private void logEvent(String subjectKey, String sourceRef, MemoryDecision decision, MemoryCandidate candidate,
-                          String before, String after, String reason, String memoryId) {
+                          String key, String before, String after, String reason, String memoryId) {
         UserMemoryEvent event = new UserMemoryEvent();
         event.setMemoryId(memoryId);
         event.setSubjectKey(subjectKey);
         event.setDecision(decision.getCode());
         event.setMemoryType(candidate.getType().getCode());
-        event.setMemoryKey(memoryNormalizer.normalizeKey(candidate.getKey()));
+        event.setMemoryKey(key);
         event.setBeforeContent(truncate(before, 500));
         event.setAfterContent(truncate(after, 500));
         event.setReason(truncate(reason, 500));

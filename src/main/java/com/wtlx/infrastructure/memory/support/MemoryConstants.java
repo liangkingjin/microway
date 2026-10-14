@@ -32,14 +32,10 @@ public final class MemoryConstants {
     public static final String SUBJECT_GUEST_PREFIX = "guest:";
 
     /**
-     * 来源类型：由对话抽取
+     * 来源类型：由对话抽取。当前 {@code source_type} 只有这一种取值
+     * （显式设置尚未开放入口，故不预留 {@code EXPLICIT} 常量）
      */
     public static final String SOURCE_CONVERSATION = "CONVERSATION";
-
-    /**
-     * 来源类型：用户显式设置
-     */
-    public static final String SOURCE_EXPLICIT = "EXPLICIT";
 
     /**
      * 稳定层记忆缓存键前缀，完整键为 {@code ai:memory:stable:<subjectKey>}

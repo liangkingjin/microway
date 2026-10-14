@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wtlx.domain.entity.memory.MemoryCandidate;
 import com.wtlx.domain.entity.memory.enums.MemoryType;
 import com.wtlx.infrastructure.memory.config.MemoryProperties;
+import com.wtlx.infrastructure.memory.support.JsonTexts;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -208,22 +209,13 @@ public class MemoryExtractionAgent {
     }
 
     /**
-     * 剥离 Markdown 围栏与前置说明，截出最外层 JSON 片段
+     * 剥离 Markdown 围栏与前置说明，截出最外层 JSON 片段。
+     * <p>
+     * 围栏剥离与字段读取共用 {@link JsonTexts}（与冲突判定器同一套容错口径），
+     * 本方法只负责"从整段文本里截出最外层 { } / [ ]"这一件事。
      */
     private String extractJsonBlock(String raw) {
-        String text = raw.trim();
-        // 去掉 ```json ... ``` 围栏
-        if (text.startsWith("```")) {
-            int firstNewline = text.indexOf('\n');
-            if (firstNewline > 0) {
-                text = text.substring(firstNewline + 1);
-            }
-            int fenceEnd = text.lastIndexOf("```");
-            if (fenceEnd >= 0) {
-                text = text.substring(0, fenceEnd);
-            }
-            text = text.trim();
-        }
+        String text = JsonTexts.stripCodeFence(raw);
         int arrayStart = text.indexOf('[');
         int objectStart = text.indexOf('{');
         int start;
@@ -271,15 +263,15 @@ public class MemoryExtractionAgent {
         if (node == null || !node.isObject()) {
             return null;
         }
-        String content = text(node, "content");
+        String content = JsonTexts.text(node, "content");
         if (!StringUtils.hasText(content) || content.trim().length() < 4) {
             return null;
         }
         MemoryCandidate candidate = new MemoryCandidate();
-        candidate.setType(MemoryType.fromCode(text(node, "type")));
-        candidate.setKey(text(node, "key"));
+        candidate.setType(MemoryType.fromCode(JsonTexts.text(node, "type")));
+        candidate.setKey(JsonTexts.text(node, "key"));
         candidate.setContent(content.trim());
-        candidate.setEvidence(text(node, "evidence"));
+        candidate.setEvidence(JsonTexts.text(node, "evidence"));
 
         JsonNode structuredNode = node.get("structured");
         if (structuredNode != null && structuredNode.isObject() && !structuredNode.isEmpty()) {
@@ -288,21 +280,13 @@ public class MemoryExtractionAgent {
 
         candidate.setConfidence(clamp(number(node, "confidence", 0.6D)));
         candidate.setImportance(clamp(number(node, "importance", 0.5D)));
-        candidate.setValidTo(parseDateTime(text(node, "validTo")));
+        candidate.setValidTo(parseDateTime(JsonTexts.text(node, "validTo")));
 
         if (candidate.getConfidence() < memoryProperties.getExtractionMinConfidence()) {
             log.debug("候选置信度 {} 低于阈值，丢弃: {}", candidate.getConfidence(), candidate.getContent());
             return null;
         }
         return candidate;
-    }
-
-    private String text(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        if (value == null || value.isNull()) {
-            return null;
-        }
-        return value.isTextual() ? value.asText() : value.toString();
     }
 
     private double number(JsonNode node, String field, double defaultValue) {

@@ -154,19 +154,20 @@ public class MemoryExtractionService {
                 memoryExtractionMapper.finishTurn(subjectKey, conversationId, turnHash, 0, 0);
                 return 0;
             }
-            int limited = Math.min(candidates.size(), memoryProperties.getExtractionMaxCandidates());
-            if (candidates.size() > limited) {
-                candidates = candidates.subList(0, limited);
-            }
+            // 候选数上限：模型偶尔一次刷出过多低价值候选，截断比逐条校验更省事
+            int maxCandidates = memoryProperties.getExtractionMaxCandidates();
+            List<MemoryCandidate> limited = candidates.size() > maxCandidates
+                    ? candidates.subList(0, maxCandidates)
+                    : candidates;
 
             // 4. 合并 / 冲突校验后落库
-            MemoryMergeService.MergeOutcome outcome = memoryMergeService.merge(subjectKey, conversationId, candidates);
+            MemoryMergeService.MergeOutcome outcome = memoryMergeService.merge(subjectKey, conversationId, limited);
 
             // 5. 回填台账，供观测抽取质量（候选数 / 落库数的比例）
             memoryExtractionMapper.finishTurn(subjectKey, conversationId, turnHash,
-                    candidates.size(), outcome.appliedCount());
+                    limited.size(), outcome.appliedCount());
             log.info("长期记忆抽取完成, subject: {}, 候选 {} 条, 落库 {} 条, 决策分布 {}",
-                    subjectKey, candidates.size(), outcome.appliedCount(), outcome.summary());
+                    subjectKey, limited.size(), outcome.appliedCount(), outcome.summary());
             return outcome.appliedCount();
         } catch (Exception e) {
             // 不可恢复错误：释放台账以便下次重试（重试上限由调用频率天然限制——

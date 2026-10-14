@@ -35,7 +35,7 @@ public class MemoryEmbeddingService {
      * @param text 文本
      * @return 向量；失败或文本为空时返回 null
      */
-    public float[] embed(String text) {
+    private float[] embed(String text) {
         if (!StringUtils.hasText(text)) {
             return null;
         }

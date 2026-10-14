@@ -18,36 +18,32 @@ package com.wtlx.domain.entity.memory.enums;
  */
 public enum MemoryDecision {
 
-    ADD("ADD", "新增"),
+    ADD("ADD"),
 
-    UPDATE("UPDATE", "就地更新"),
+    UPDATE("UPDATE"),
 
-    SUPERSEDE("SUPERSEDE", "取代旧记忆"),
+    SUPERSEDE("SUPERSEDE"),
 
-    FORGET("FORGET", "否定并失效"),
+    FORGET("FORGET"),
 
-    NOOP("NOOP", "重复，仅巩固"),
+    NOOP("NOOP"),
 
     /**
      * 由清理任务触发的批量失效（过期 / 低置信 / 超容量 / 冗余），非抽取流程产生
      */
-    CLEANUP("CLEANUP", "批量清理");
+    CLEANUP("CLEANUP");
 
+    /**
+     * 落库编码，与 {@code user_memory_event.decision} 列取值一致
+     */
     private final String code;
 
-    private final String label;
-
-    MemoryDecision(String code, String label) {
+    MemoryDecision(String code) {
         this.code = code;
-        this.label = label;
     }
 
     public String getCode() {
         return code;
-    }
-
-    public String getLabel() {
-        return label;
     }
 
     public static MemoryDecision fromCode(String code) {

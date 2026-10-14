@@ -50,21 +50,21 @@ public class MemorySubjectResolver {
     public MemoryPrincipal resolve(String userId, String token, String clientId) {
         // 1. 显式 userId 优先级最高
         if (StringUtils.hasText(userId)) {
-            return buildUser(userId.trim(), "参数 userId");
+            return buildUser(userId.trim());
         }
 
         // 2. token → Redis 登录态
         if (StringUtils.hasText(token)) {
             Long resolved = resolveUserIdByToken(token.trim());
             if (resolved != null) {
-                return buildUser(String.valueOf(resolved), "token 解析");
+                return buildUser(String.valueOf(resolved));
             }
         }
 
         // 3. 兜底：本线程若已由拦截器写入登录态（例如将来 AI 路径恢复鉴权），直接复用
         UserDTO current = UserHolder.getUser();
         if (current != null && current.getId() != null) {
-            return buildUser(String.valueOf(current.getId()), "UserHolder");
+            return buildUser(String.valueOf(current.getId()));
         }
 
         // 4. 游客主体
@@ -72,7 +72,7 @@ public class MemorySubjectResolver {
             String key = memoryNormalizer.sanitizeSubjectKey(
                     MemoryConstants.SUBJECT_GUEST_PREFIX + clientId.trim());
             if (key != null) {
-                return new MemoryPrincipal(key, null, false);
+                return new MemoryPrincipal(key, false);
             }
         }
 
@@ -100,18 +100,13 @@ public class MemorySubjectResolver {
         }
     }
 
-    private MemoryPrincipal buildUser(String userId, String source) {
+    /**
+     * 组装登录用户主体。userId 不要求是数字——外部系统主键同样能作为主体键使用，
+     * 因为长期记忆的唯一作用域边界是 {@code subjectKey} 字符串本身。
+     */
+    private MemoryPrincipal buildUser(String userId) {
         String subjectKey = memoryNormalizer.sanitizeSubjectKey(
                 MemoryConstants.SUBJECT_USER_PREFIX + userId);
-        if (subjectKey == null) {
-            return MemoryPrincipal.NONE;
-        }
-        try {
-            return new MemoryPrincipal(subjectKey, Long.valueOf(userId), true);
-        } catch (NumberFormatException e) {
-            // userId 非数字（例如外部系统主键）时仍可作为主体键使用，只是没有数值型 userId
-            log.debug("userId 非数值，按字符串主体处理: {}（来源：{}）", userId, source);
-            return new MemoryPrincipal(subjectKey, null, true);
-        }
+        return subjectKey == null ? MemoryPrincipal.NONE : new MemoryPrincipal(subjectKey, true);
     }
 }

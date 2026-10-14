@@ -525,18 +525,6 @@ public class UserMemoryMapper {
     }
 
     /**
-     * 查出超容量的主体（含当前生效条数），供清理任务按主体逐个收敛
-     *
-     * @return 主体键列表（按条数降序）
-     */
-    public List<String> listSubjectsOverCap(int cap, int limit) {
-        return jdbcTemplate.queryForList(
-                "SELECT subject_key FROM user_memory WHERE status = 'ACTIVE'"
-                        + " GROUP BY subject_key HAVING COUNT(*) > ? ORDER BY COUNT(*) DESC LIMIT ?",
-                String.class, cap, limit);
-    }
-
-    /**
      * 全部存有生效记忆的主体（清理任务遍历用）
      */
     public List<String> listActiveSubjects(int limit) {

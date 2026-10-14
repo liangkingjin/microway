@@ -66,14 +66,4 @@ public class MemoryExtractionMapper {
             log.warn("抽取台账释放失败: {}", e.getMessage());
         }
     }
-
-    /**
-     * 某个会话已抽取的轮次数（观测用）
-     */
-    public int countByConversation(String conversationId) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM user_memory_extraction WHERE conversation_id = ?",
-                Integer.class, conversationId);
-        return count == null ? 0 : count;
-    }
 }

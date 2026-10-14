@@ -66,12 +66,4 @@ public class MemoryHit implements Serializable {
     public boolean isStable() {
         return validTo == null && type != null && type.isStable();
     }
-
-    /**
-     * 渲染为注入模型的一行文本
-     */
-    public String toPromptLine() {
-        String typeLabel = type == null ? "事实" : type.getLabel();
-        return "- [" + typeLabel + "] " + content + "（置信 " + String.format("%.2f", confidence) + "）";
-    }
 }

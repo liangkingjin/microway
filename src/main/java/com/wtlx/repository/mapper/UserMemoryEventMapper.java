@@ -66,18 +66,6 @@ public class UserMemoryEventMapper {
     }
 
     /**
-     * 批量追加（清理任务一次产生大量失效决策时用，减少往返）
-     */
-    public void insertBatch(List<UserMemoryEvent> events) {
-        if (events == null || events.isEmpty()) {
-            return;
-        }
-        for (UserMemoryEvent event : events) {
-            insert(event);
-        }
-    }
-
-    /**
      * 查询某主体的记忆变更历史（倒序），用于回溯"这条偏好为什么被覆盖"
      */
     public List<UserMemoryEvent> findBySubject(String subjectKey, int limit) {

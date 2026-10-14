@@ -52,7 +52,7 @@ public class SlotMemoryPath implements MemoryPath {
         hints.put("transport.prefer", List.of("交通", "高铁", "飞机", "自驾", "火车", "地铁", "包车", "怎么去"));
         hints.put("travel.style", List.of("风格", "穷游", "深度游", "打卡", "旅游方式", "玩法"));
         hints.put("trip.pace", List.of("节奏", "太赶", "悠闲", "紧凑", "休闲", "安排紧", "慢慢玩"));
-        hints.put("party.companion", List.of("同行", "一个人", "独自", "独自一人", "和朋友", "女朋友", "男朋友",
+        hints.put("party.companion", List.of("同行", "一个人", "独自", "和朋友", "女朋友", "男朋友",
                 "带孩子", "亲子", "爸妈", "父母", "同事"));
         hints.put("interest.tag", List.of("兴趣", "爱好", "喜欢玩", "喜欢什么", "偏好"));
         hints.put("avoid.prefer", List.of("不喜欢", "避开", "讨厌", "人多", "排队", "受不了", "不想去"));

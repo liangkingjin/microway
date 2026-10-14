@@ -110,12 +110,12 @@ public class MemoryRetrievalService {
 
         // 3. RRF 融合
         List<MemoryHit> hits = rrfFuser.fuse(results, memoryProperties.getRrfK(), topN);
-        if (hits.isEmpty()) {
-            return hits;
-        }
 
-        // 4. 命中统计异步回写（不阻塞对话）
-        trackHitStats(hits);
+        // 4. 命中统计异步回写（不阻塞对话）。空结果无需回写，但日志照常输出——
+        //    "为什么这一轮没记起来"恰恰是最需要观测的场景
+        if (!hits.isEmpty()) {
+            trackHitStats(hits);
+        }
         log.info("长期记忆检索完成, subject: {}, 命中 {} 条, 各路口径: {}",
                 subjectKey, hits.size(), describe(results));
         return hits;

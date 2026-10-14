@@ -13,38 +13,34 @@ public enum MemoryStatus {
     /**
      * 生效中，参与检索与上下文注入
      */
-    ACTIVE("ACTIVE", "生效中"),
+    ACTIVE("ACTIVE"),
 
     /**
      * 已被更新的记忆取代（同槽位新值覆盖旧值），保留用于审计
      */
-    SUPERSEDED("SUPERSEDED", "已被取代"),
+    SUPERSEDED("SUPERSEDED"),
 
     /**
      * 已过期：有效期到点，或被用户明确否定
      */
-    EXPIRED("EXPIRED", "已过期"),
+    EXPIRED("EXPIRED"),
 
     /**
      * 用户主动删除（按需清理）
      */
-    DELETED("DELETED", "已删除");
+    DELETED("DELETED");
 
+    /**
+     * 落库编码，与 {@code user_memory.status} 列取值一致
+     */
     private final String code;
 
-    private final String label;
-
-    MemoryStatus(String code, String label) {
+    MemoryStatus(String code) {
         this.code = code;
-        this.label = label;
     }
 
     public String getCode() {
         return code;
-    }
-
-    public String getLabel() {
-        return label;
     }
 
     public static MemoryStatus fromCode(String code) {

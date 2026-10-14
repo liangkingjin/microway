@@ -43,11 +43,6 @@ import java.util.Map;
 @Component
 public class LongTermMemoryInterceptor extends ModelInterceptor {
 
-    /**
-     * 记忆主体键在 {@code RunnableConfig} 元数据中的位置，与工具侧共用同一常量
-     */
-    public static final String SUBJECT_KEY = MemoryConstants.SUBJECT_KEY_METADATA;
-
     @Resource
     private MemoryContextBuilder memoryContextBuilder;
 
@@ -102,14 +97,15 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
      * 从 {@code RunnableConfig} 元数据取记忆主体键。
      * <p>
      * 与 conversationId 同理：整条链路跑在 Reactor 线程上，ThreadLocal 传不过来，
-     * 元数据是唯一可靠通道。
+     * 元数据是唯一可靠通道。键名与召回工具共用 {@link MemoryConstants#SUBJECT_KEY_METADATA}，
+     * 不在此处另立常量，避免两处同值常量各自漂移。
      */
     private String resolveSubjectKey(ModelRequest request) {
         Map<String, Object> context = request.getContext();
         if (context == null) {
             return null;
         }
-        Object value = context.get(SUBJECT_KEY);
+        Object value = context.get(MemoryConstants.SUBJECT_KEY_METADATA);
         return value instanceof String subjectKey && !subjectKey.isBlank() ? subjectKey : null;
     }
 
