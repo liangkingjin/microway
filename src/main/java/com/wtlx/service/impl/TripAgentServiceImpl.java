@@ -13,6 +13,9 @@ import com.wtlx.config.ConversationContextHolder;
 import com.wtlx.domain.entity.dto.ai.ThinkingStepVO;
 import com.wtlx.domain.entity.dto.ai.TripAnswerVO;
 import com.wtlx.domain.entity.dto.ai.TripCardVO;
+import com.wtlx.infrastructure.memory.extraction.MemoryExtractionService;
+import com.wtlx.infrastructure.memory.support.MemoryConstants;
+import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
 import com.wtlx.infrastructure.rag.generation.CardSink;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
@@ -85,6 +88,9 @@ public class TripAgentServiceImpl implements TripAgentService {
     private ConversationMemoryService memoryService;
 
     @Resource
+    private MemoryExtractionService memoryExtractionService;
+
+    @Resource
     private GenerationRegistry generationRegistry;
 
     @Resource
@@ -105,9 +111,12 @@ public class TripAgentServiceImpl implements TripAgentService {
             });
 
     @Override
-    public SseEmitter chatStream(String message, String threadId, String requestId) {
+    public SseEmitter chatStream(String message, String threadId, String requestId, MemoryPrincipal principal) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         String conversationId = "react_agent_" + threadId;
+        // 长期记忆主体：登录用户跨会话共享同一份画像，游客按设备 id 隔离；
+        // 无身份线索时为 null，此时只启用会话内短期记忆
+        String subjectKey = principal == null || !principal.available() ? null : principal.subjectKey();
 
         // 1. 新流挤掉同会话的旧流（用户连点时旧流可能在别的实例上，走 Redis 活跃表）
         cancelService.cancelStaleByThreadId(threadId, requestId);
@@ -161,9 +170,12 @@ public class TripAgentServiceImpl implements TripAgentService {
 
                 RunnableConfig config = RunnableConfig.builder()
                         .threadId(threadId)
-                        // 流式执行跑在 Reactor 线程，ThreadLocal 传不过去，故同时放进元数据
+                        // 流式执行跑在 Reactor 线程，ThreadLocal 传不过去，故同时放进元数据。
+                        // 短期记忆（conversationId）与长期记忆（subjectKey）走同一条通道：
+                        // 前者由记忆拦截器消费，后者由长期记忆拦截器与召回工具消费
                         .addMetadata(ConversationMemoryInterceptor.CONVERSATION_ID_KEY, conversationId)
                         .addMetadata(CardSink.METADATA_KEY, cardSink)
+                        .addMetadata(MemoryConstants.SUBJECT_KEY_METADATA, subjectKey)
                         .build();
 
                 StreamEventRouter router = new StreamEventRouter(new StreamEventRouter.StreamSink() {
@@ -274,6 +286,13 @@ public class TripAgentServiceImpl implements TripAgentService {
                     // 卡片随正文一起落库，重新进入会话时才能恢复"正文 + 游记卡片"的展示
                     memoryService.appendAndCompressIfNeeded(
                             conversationId, message, answer.toString(), toJson(cardSink.snapshot()));
+                }
+                // 长期记忆抽取：一轮对话结束后的异步沉淀。
+                // 放在这里而不是模型链路里，是因为抽取要调 LLM（秒级），
+                // 必须与"回答已经生成完"解耦——用户不该因为后台在总结经验而多等一秒。
+                // 抽取内部自带幂等（同一轮只处理一次）与成本前置过滤
+                if (subjectKey != null && !answer.isEmpty()) {
+                    memoryExtractionService.extractAsync(subjectKey, conversationId, message, answer.toString());
                 }
                 ConversationContextHolder.clear();
                 generationRegistry.unregister(requestId);

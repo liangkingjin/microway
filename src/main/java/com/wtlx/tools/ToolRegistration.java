@@ -1,5 +1,6 @@
 package com.wtlx.tools;
 
+import com.wtlx.infrastructure.memory.retrieval.MemoryRecallTool;
 import com.wtlx.infrastructure.rag.adapter.RagRetrievalTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.support.ToolCallbacks;
@@ -28,11 +29,13 @@ public class ToolRegistration {
      *
      * @param mcpToolCallbackProvider MCP 工具回调提供者（由 Spring AI MCP 自动配置）
      * @param ragRetrievalTool        RAG 知识库检索工具（Spring Bean）
+     * @param memoryRecallTool        用户长期记忆召回工具（Spring Bean）
      * @return 合并后的工具回调数组
      */
     @Bean
     public ToolCallback[] allTools(ToolCallbackProvider mcpToolCallbackProvider,
-                                   RagRetrievalTool ragRetrievalTool) {
+                                   RagRetrievalTool ragRetrievalTool,
+                                   MemoryRecallTool memoryRecallTool) {
         log.info("开始注册工具集");
 
         // 1. 收集本地工具（均为 Spring Bean）
@@ -49,7 +52,10 @@ public class ToolRegistration {
                 resourceDownloadTool,
                 terminalOperationTool,
                 terminateTool,
-                ragRetrievalTool
+                ragRetrievalTool,
+                // 长期记忆的"被动召回"入口：与拦截器的"主动注入"互补，
+                // 让模型在需要确认用户偏好时能自己发起检索
+                memoryRecallTool
         );
 
         // 2. 获取 MCP 工具

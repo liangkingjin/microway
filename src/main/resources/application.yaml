@@ -116,6 +116,62 @@ trip-agent:
     # 启动时是否对缺失索引的来源做全量回填（量大时建议关闭，改由管理接口触发）
     rebuild-on-startup: false
 
+  # ==================== 用户长期记忆（跨会话） ====================
+  # 短期记忆（摘要 + 最近轮次）的保留轮数 / 阈值是常量，写在
+  # ConversationMemoryServiceImpl 与 SummaryCompressorImpl 里；
+  # 这里是长期记忆（user_memory 表 + pgvector）的全部可调参数。
+  #
+  # 注意：相似度类阈值按 DashScope text-embedding-v3（1024 维）实测标定，
+  # 换 embedding 模型或换抽取模型必须重新标定，否则会出现
+  # "该合并的没合并（冗余累积）"或"不该合并的被覆盖（偏好被误改）"。
+  memory:
+    enabled: true
+    # ---- 抽取（异步子 Agent）----
+    extraction-enabled: true
+    # 低于该长度的发言不抽取，直接省一次 LLM 调用
+    extraction-min-chars: 8
+    # 候选低于该置信度直接丢弃
+    extraction-min-confidence: 0.35
+    # 单轮候选数上限
+    extraction-max-candidates: 8
+    extraction-pool-size: 2
+    # ---- 合并与冲突校验 ----
+    # 相似度 ≥ 0.92 视为同一事实的不同表述（不新增）
+    duplicate-similarity: 0.92
+    # 相似度 < 0.60 视为无关（直接新增）；0.60~0.92 之间交冲突判定模型裁决
+    conflict-similarity: 0.60
+    conflict-judge-enabled: true
+    semantic-search-top-k: 5
+    # ---- 多路并行检索（向量 / 槽位 / 关键词 / 稳定层）----
+    retrieval-top-n: 8
+    vector-top-k: 12
+    vector-threshold: 0.45
+    slot-top-k: 6
+    keyword-top-k: 8
+    stable-top-k: 6
+    rrf-k: 60
+    # 各路权重：向量是主路，稳定层保证核心画像稳定复现，关键词仅作兜底
+    vector-weight: 1.0
+    slot-weight: 0.8
+    stable-weight: 0.9
+    keyword-weight: 0.6
+    # 单路超时：任一路慢/挂都不拖垮对话
+    path-timeout-ms: 800
+    track-hit-stats: true
+    # ---- 上下文注入 ----
+    # 注入模型的记忆文本字符上限（记忆是每轮固定开销，必须封顶）
+    context-max-chars: 900
+    stable-max-items: 8
+    ephemeral-max-items: 4
+    # 稳定层缓存（查询无关，写入时失效）
+    context-cache-ttl-seconds: 300
+    # ---- 清理 ----
+    active-cap-per-subject: 200
+    low-confidence-threshold: 0.3
+    low-confidence-stale-days: 30
+    purge-retention-days: 90
+    cleanup-batch-subjects: 200
+
 # ==================== 接口文档 ====================
 springdoc:
   swagger-ui:

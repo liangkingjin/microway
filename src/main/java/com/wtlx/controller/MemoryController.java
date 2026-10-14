@@ -1,0 +1,299 @@
+package com.wtlx.controller;
+
+import com.wtlx.domain.entity.conversation.ConversationMessage;
+import com.wtlx.domain.entity.conversation.ConversationSummary;
+import com.wtlx.domain.entity.dto.Result;
+import com.wtlx.domain.entity.memory.MemoryHit;
+import com.wtlx.domain.entity.memory.MemoryOverviewVO;
+import com.wtlx.domain.entity.memory.UserMemory;
+import com.wtlx.domain.entity.memory.UserMemoryEvent;
+import com.wtlx.infrastructure.memory.cleanup.MemoryCleanupService;
+import com.wtlx.infrastructure.memory.extraction.MemoryExtractionService;
+import com.wtlx.infrastructure.memory.retrieval.MemoryRetrievalService;
+import com.wtlx.infrastructure.memory.schema.MemorySchemaInitializer;
+import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
+import com.wtlx.infrastructure.memory.support.MemorySubjectResolver;
+import com.wtlx.repository.mapper.ConversationMessageMapper;
+import com.wtlx.repository.mapper.ConversationSummaryMapper;
+import com.wtlx.repository.mapper.UserMemoryEventMapper;
+import com.wtlx.repository.mapper.UserMemoryMapper;
+import com.wtlx.service.ConversationMemoryService;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 用户长期记忆管理接口：观测、检索调试、按需清理、手动抽取、回溯审计。
+ * <p>
+ * 与 {@code RagAdminController} 同族，映射在 {@code /ai/**} 下（免登录路径），
+ * 调试与运维入口。身份与对话链路一致：通过 {@code userId} / {@code token} / {@code clientId}
+ * 解析记忆主体，缺一不可时返回失败而不是"落一个默认主体"——记忆串号比接口报错严重得多。
+ *
+ * @author 金小梁
+ */
+@Slf4j
+@Api(tags = "用户长期记忆管理接口")
+@RestController
+@RequestMapping("/ai/memory")
+public class MemoryController {
+
+    /**
+     * 管理接口单次返回条数上限
+     */
+    private static final int MAX_LIMIT = 200;
+
+    /**
+     * 概览里回溯的最近消息条数
+     */
+    private static final int OVERVIEW_RECENT_MESSAGES = 6;
+
+    @Resource
+    private MemorySubjectResolver memorySubjectResolver;
+
+    @Resource
+    private MemoryRetrievalService memoryRetrievalService;
+
+    @Resource
+    private MemoryExtractionService memoryExtractionService;
+
+    @Resource
+    private MemoryCleanupService memoryCleanupService;
+
+    @Resource
+    private MemorySchemaInitializer memorySchemaInitializer;
+
+    @Resource
+    private UserMemoryMapper userMemoryMapper;
+
+    @Resource
+    private UserMemoryEventMapper userMemoryEventMapper;
+
+    @Resource
+    private ConversationSummaryMapper conversationSummaryMapper;
+
+    @Resource
+    private ConversationMessageMapper conversationMessageMapper;
+
+    @Resource
+    private ConversationMemoryService conversationMemoryService;
+
+    @ApiOperation("记忆全景：短期记忆与长期记忆对照")
+    @GetMapping("/overview")
+    public Result overview(@RequestParam(required = false) String conversationId,
+                           @RequestParam(required = false) String query,
+                           @RequestParam(required = false) String userId,
+                           @RequestParam(required = false) String token,
+                           @RequestParam(required = false) String clientId) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+
+        MemoryOverviewVO overview = new MemoryOverviewVO();
+        overview.setSubjectKey(principal.available() ? principal.subjectKey() : null);
+        overview.setAuthenticated(principal.authenticated());
+
+        // 短期记忆：作用域是会话，换 threadId 就变
+        if (StringUtils.hasText(conversationId)) {
+            overview.setSession(buildSessionScope(conversationId));
+        }
+
+        // 长期记忆：作用域是用户，换 threadId 不变
+        MemoryOverviewVO.LongTermScope longTerm = new MemoryOverviewVO.LongTermScope();
+        if (principal.available()) {
+            longTerm.setActiveCount(userMemoryMapper.countActive(principal.subjectKey()));
+            longTerm.setCountByType(userMemoryMapper.countActiveByType(principal.subjectKey()));
+            if (StringUtils.hasText(query)) {
+                List<MemoryHit> hits = memoryRetrievalService.retrieve(principal.subjectKey(), query);
+                overview.setHits(hits);
+                longTerm.setHitCount(hits.size());
+            }
+        }
+        overview.setLongTerm(longTerm);
+        return Result.ok(overview);
+    }
+
+    @ApiOperation("列举某主体的长期记忆")
+    @GetMapping("/list")
+    public Result list(@RequestParam(required = false) String userId,
+                       @RequestParam(required = false) String token,
+                       @RequestParam(required = false) String clientId,
+                       @RequestParam(required = false) String type,
+                       @RequestParam(required = false, defaultValue = "ACTIVE") String status,
+                       @RequestParam(required = false) Integer limit) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
+        }
+        List<UserMemory> memories = userMemoryMapper.listBySubject(
+                principal.subjectKey(), type, status, clampLimit(limit, 50));
+        return Result.ok(memories);
+    }
+
+    @ApiOperation("多路并行检索调试（含各路原始得分）")
+    @GetMapping("/search")
+    public Result search(@RequestParam String query,
+                         @RequestParam(required = false) String userId,
+                         @RequestParam(required = false) String token,
+                         @RequestParam(required = false) String clientId,
+                         @RequestParam(required = false) Integer topN) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
+        }
+        List<MemoryHit> hits = memoryRetrievalService.retrieve(
+                principal.subjectKey(), query, clampLimit(topN, 8));
+        // 同时回传各路命中分布，便于判断"是哪条路在起作用"
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("subjectKey", principal.subjectKey());
+        payload.put("query", query);
+        payload.put("hitCount", hits.size());
+        payload.put("hits", hits);
+        return Result.ok(payload);
+    }
+
+    @ApiOperation("查询记忆变更审计流")
+    @GetMapping("/timeline")
+    public Result timeline(@RequestParam(required = false) String memoryId,
+                           @RequestParam(required = false) String userId,
+                           @RequestParam(required = false) String token,
+                           @RequestParam(required = false) String clientId,
+                           @RequestParam(required = false) Integer limit) {
+        int size = clampLimit(limit, 50);
+        if (StringUtils.hasText(memoryId)) {
+            return Result.ok(userMemoryEventMapper.findByMemoryId(memoryId, size));
+        }
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 memoryId 或 userId / token / clientId");
+        }
+        List<UserMemoryEvent> events = userMemoryEventMapper.findBySubject(principal.subjectKey(), size);
+        return Result.ok(events);
+    }
+
+    @ApiOperation("手动触发记忆抽取（调试与补偿）")
+    @PostMapping("/extract")
+    public Result extract(@RequestParam String conversationId,
+                          @RequestParam String userMessage,
+                          @RequestParam(required = false) String assistantReply,
+                          @RequestParam(required = false) String userId,
+                          @RequestParam(required = false) String token,
+                          @RequestParam(required = false) String clientId) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
+        }
+        int applied = memoryExtractionService.extractNow(
+                principal.subjectKey(), conversationId, userMessage, assistantReply);
+        return Result.ok("抽取完成，落库 " + applied + " 条记忆");
+    }
+
+    @ApiOperation("按需清理：单主体收敛（过期 / 低置信 / 超容量 / 冗余合并）")
+    @PostMapping("/cleanup")
+    public Result cleanup(@RequestParam(required = false) String userId,
+                          @RequestParam(required = false) String token,
+                          @RequestParam(required = false) String clientId,
+                          @RequestParam(required = false, defaultValue = "false") boolean all) {
+        if (all) {
+            return Result.ok(memoryCleanupService.cleanupAll());
+        }
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一，或显式指定 all=true");
+        }
+        return Result.ok(memoryCleanupService.cleanupSubject(principal.subjectKey()));
+    }
+
+    @ApiOperation("删除单条记忆（软删，保留审计）")
+    @DeleteMapping("/{memoryId}")
+    public Result deleteOne(@PathVariable String memoryId,
+                            @RequestParam(required = false) String userId,
+                            @RequestParam(required = false) String token,
+                            @RequestParam(required = false) String clientId) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
+        }
+        int rows = userMemoryMapper.markDeleted(principal.subjectKey(), memoryId);
+        return rows > 0 ? Result.ok("已删除") : Result.fail("未找到该记忆或已被删除");
+    }
+
+    @ApiOperation("清空某主体的全部长期记忆（物理删除，含历史行）")
+    @DeleteMapping
+    public Result deleteSubject(@RequestParam(required = false) String userId,
+                                @RequestParam(required = false) String token,
+                                @RequestParam(required = false) String clientId) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        if (!principal.available()) {
+            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
+        }
+        int rows = userMemoryMapper.deleteBySubject(principal.subjectKey());
+        return Result.ok("已清空 " + rows + " 条记忆");
+    }
+
+    @ApiOperation("补建记忆相关表结构（PG 恢复后重试）")
+    @PostMapping("/schema")
+    public Result ensureSchema() {
+        int failures = memorySchemaInitializer.ensureSchema();
+        return failures == 0 ? Result.ok("表结构就绪") : Result.fail("存在 " + failures + " 条 DDL 失败，请查看日志");
+    }
+
+    @ApiOperation("全局记忆类型分布（运维观测）")
+    @GetMapping("/stats")
+    public Result stats() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("countByType", userMemoryMapper.countAllActiveByType());
+        return Result.ok(payload);
+    }
+
+    /**
+     * 组装短期记忆视图
+     */
+    private MemoryOverviewVO.SessionScope buildSessionScope(String conversationId) {
+        MemoryOverviewVO.SessionScope scope = new MemoryOverviewVO.SessionScope();
+        scope.setConversationId(conversationId);
+        scope.setMessageCount(conversationMessageMapper.countByConversationId(conversationId));
+        scope.setUserTurns(conversationMessageMapper.countUserMessages(conversationId));
+        ConversationSummary summary = conversationSummaryMapper.findByConversationId(conversationId);
+        if (summary != null) {
+            scope.setSummary(summary.getSummary());
+            scope.setSummaryMessageCount(summary.getMessageCount());
+        }
+        List<ConversationMessage> recent =
+                conversationMemoryService.loadRecentMessages(conversationId, OVERVIEW_RECENT_MESSAGES);
+        List<MemoryOverviewVO.MessagePreview> previews = new ArrayList<>(recent.size());
+        for (ConversationMessage message : recent) {
+            MemoryOverviewVO.MessagePreview preview = new MemoryOverviewVO.MessagePreview();
+            preview.setRole(message.getRole() == null ? null : message.getRole().getCode());
+            preview.setContent(abbreviate(message.getContent()));
+            preview.setTime(message.getCreatedAt() == null ? null : message.getCreatedAt().toString());
+            previews.add(preview);
+        }
+        scope.setRecentMessages(previews);
+        return scope;
+    }
+
+    private int clampLimit(Integer limit, int defaultValue) {
+        int value = limit == null ? defaultValue : limit;
+        return Math.max(1, Math.min(MAX_LIMIT, value));
+    }
+
+    private String abbreviate(String content) {
+        if (content == null) {
+            return null;
+        }
+        return content.length() > 120 ? content.substring(0, 120) + "..." : content;
+    }
+}
