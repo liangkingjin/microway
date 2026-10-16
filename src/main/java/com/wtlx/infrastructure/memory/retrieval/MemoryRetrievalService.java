@@ -19,16 +19,19 @@ import java.util.concurrent.TimeUnit;
 /**
  * 长期记忆多路并行检索服务。
  * <p>
- * <b>为什么必须并行</b>：四路检索串行执行时，总延迟是四路之和（每路一次 PG 查询，
- * 向量路还带 HNSW 扫描）。而它就挂在模型调用前的关键路径上——每一次对话的首字延迟
- * 都会被它直接放大。并行后延迟等于最慢的一路。
+ * <b>两条链路，各司其职</b>：语义路（画像兜底 + 向量召回）负责"换个说法也能命中"与
+ * "画像不丢"，关键词路（中文 n-gram）负责"embedding 挂了或专有名词被稀释时仍能捞回来"。
+ * 两路的原始分数量纲完全不同（余弦相似度 0~1 : 命中词数 0~N），因此融合走 RRF——
+ * 只用排名、不用分差，详见 {@link RrfFuser}。
  * <p>
- * <b>为什么每路必须独立超时</b>：任一路慢（例如向量路在记忆量大时 HNSW 扫描变慢、
- * 或 Redis 抖动）都不能拖垮对话。故每路 {@code orTimeout} 后降级为空结果参与融合，
- * 由剩余各路继续支撑召回。这是"记忆是增强，不是依赖"的直接体现：
- * 记忆服务全挂时，Agent 仍应能正常回答，只是不再个性化。
+ * <b>为什么必须并行</b>：它就挂在模型调用前的关键路径上，串行执行会让总延迟变成两路之和，
+ * 每一次对话的首字延迟都会被直接放大。并行后延迟等于最慢的一路。
  * <p>
- * 查询向量在此处<b>统一计算一次</b>后传给各路，避免各路各算一次 embedding（多花 3 倍费用）。
+ * <b>为什么每路必须独立超时</b>：任一路慢（PG 抖动、embedding 超时）都不能拖垮对话。
+ * 故每路 {@code orTimeout} 后降级为空结果参与融合，由另一条路继续支撑召回——
+ * 这是"记忆是增强，不是依赖"的直接体现：记忆服务全挂时，Agent 仍应能正常回答。
+ * <p>
+ * 查询向量在此处<b>统一计算一次</b>后传给语义路，避免各路各算一次 embedding。
  *
  * @author 金小梁
  */
@@ -83,10 +86,10 @@ public class MemoryRetrievalService {
             return List.of();
         }
 
-        // 1. 查询向量统一计算一次，四路共用
+        // 1. 查询向量统一计算一次（只语义路要用，不重复计费）
         String queryVectorLiteral = memoryEmbeddingService.embedToLiteral(query);
 
-        // 2. 四路并行（各自独立超时 + 独立降级）
+        // 2. 两条路并行（各自独立超时 + 独立降级）
         List<CompletableFuture<MemoryPathResult>> futures = new ArrayList<>(paths.size());
         for (MemoryPath path : paths) {
             futures.add(CompletableFuture
@@ -98,15 +101,8 @@ public class MemoryRetrievalService {
                     }));
         }
 
-        List<MemoryPathResult> results = new ArrayList<>(futures.size());
-        for (int i = 0; i < futures.size(); i++) {
-            // exceptionally 已兜底，join 不会抛；仍包一层以便单路异常不连累整体
-            try {
-                results.add(futures.get(i).join());
-            } catch (Exception e) {
-                results.add(MemoryPathResult.empty(paths.get(i)));
-            }
-        }
+        // exceptionally 已兜住全部异常（含 orTimeout 产生的 CompletionException），join 不会抛
+        List<MemoryPathResult> results = futures.stream().map(CompletableFuture::join).toList();
 
         // 3. RRF 融合
         List<MemoryHit> hits = rrfFuser.fuse(results, memoryProperties.getRrfK(), topN);
@@ -179,17 +175,14 @@ public class MemoryRetrievalService {
     }
 
     /**
-     * 各路召回条数解析：按路名取对应配置，未登记的路退回向量路条数。
+     * 各路召回条数解析：按路名取对应配置，未登记的路退回语义路条数。
      * <p>
      * 集中一处而不是散在各路的 if-else 里：新增一路时只需在这里补一行，
      * 忘记补也不会导致启动失败，只是用默认条数。
      */
     private int resolveTopK(String pathName) {
         return switch (pathName) {
-            case "vector" -> memoryProperties.getVectorTopK();
-            case "slot" -> memoryProperties.getSlotTopK();
             case "keyword" -> memoryProperties.getKeywordTopK();
-            case "stable" -> memoryProperties.getStableTopK();
             default -> memoryProperties.getVectorTopK();
         };
     }

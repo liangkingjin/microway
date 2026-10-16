@@ -38,11 +38,6 @@ public final class MemoryConstants {
     public static final String SOURCE_CONVERSATION = "CONVERSATION";
 
     /**
-     * 稳定层记忆缓存键前缀，完整键为 {@code ai:memory:stable:<subjectKey>}
-     */
-    public static final String CACHE_STABLE_PREFIX = "ai:memory:stable:";
-
-    /**
      * 槽位键缺省值：模型未给出槽位时使用，保证同一类型的信息仍能聚到同一槽位做冲突校验
      */
     public static final String DEFAULT_MEMORY_KEY = "general";

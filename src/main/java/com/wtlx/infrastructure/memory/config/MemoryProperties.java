@@ -73,7 +73,7 @@ public class MemoryProperties {
      */
     private int semanticSearchTopK = 5;
 
-    // ==================== 多路检索 ====================
+    // ==================== 检索（两条链路） ====================
 
     /**
      * 融合后最终返回、并参与上下文注入的记忆条数
@@ -81,19 +81,20 @@ public class MemoryProperties {
     private int retrievalTopN = 8;
 
     /**
-     * 向量路召回条数
+     * 语义路 · 向量召回条数
      */
     private int vectorTopK = 12;
 
     /**
-     * 向量路相似度阈值（cosine，0~1）
+     * 语义路 · 向量相似度阈值（cosine，0~1）
      */
     private double vectorThreshold = 0.45D;
 
     /**
-     * 槽位路召回条数
+     * 语义路 · 画像兜底条数：与查询无关，长期有效的高价值偏好，
+     * 保证新会话第一句没提偏好时也能把画像带进上下文
      */
-    private int slotTopK = 6;
+    private int stableFloorSize = 4;
 
     /**
      * 关键词路召回条数
@@ -101,24 +102,15 @@ public class MemoryProperties {
     private int keywordTopK = 8;
 
     /**
-     * 稳定路召回条数
-     */
-    private int stableTopK = 6;
-
-    /**
      * RRF 平滑常数 k，越大则各路排名差异被压得越平
      */
     private int rrfK = 60;
 
     /**
-     * 各检索路权重（RRF 加权）：向量路是主路，稳定路保证长期偏好稳定复现，
-     * 槽位路负责精确命中预置槽位，关键词路是 embedding 抖动时的兜底
+     * 各路权重（RRF 加权）：语义路是主路，关键词路只在 embedding 抖动、
+     * 或中文专有名词被向量稀释时救场，故权重低
      */
     private double vectorWeight = 1.0D;
-
-    private double slotWeight = 0.80D;
-
-    private double stableWeight = 0.90D;
 
     private double keywordWeight = 0.60D;
 
@@ -148,11 +140,6 @@ public class MemoryProperties {
      * 时效层最多注入条数
      */
     private int ephemeralMaxItems = 4;
-
-    /**
-     * 稳定层记忆的 Redis 缓存时长（秒）；缓存随写入失效，仅用于避免每轮重复查库
-     */
-    private long contextCacheTtlSeconds = 300L;
 
     // ==================== 清理 ====================
 

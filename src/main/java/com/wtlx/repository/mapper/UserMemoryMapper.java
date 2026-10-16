@@ -267,12 +267,36 @@ public class UserMemoryMapper {
     }
 
     // ==================================================================
-    // 多路并行检索（四条检索路各一个查询）
+    // 并行检索（语义路 + 关键词路）
     // ==================================================================
 
     /**
-     * 检索路 A · 向量语义路：查询向量与记忆向量的余弦相似度排序。
-     * 主路，负责"用户换个说法也能命中同一偏好"
+     * 语义路 · 画像兜底：按 {@code 置信度 × 重要度} 取高分记忆，<b>与查询无关</b>。
+     * <p>
+     * 这一段是"跨会话稳定复用"的保障：其余召回手段都以"与本轮问句相关"为前提，
+     * 于是会出现一个反直觉的问题——用户新开会话问"帮我规划一下行程"，
+     * 问句里没有任何偏好线索，语义与关键词两条路都召不回"不吃辣"这条老记忆，
+     * 而它明明最有价值。取高分记忆的目的就是把它顶上来。
+     * <p>
+     * 返回的是"高分记忆"而非"稳定层记忆"：排序键与类型无关，调用方按
+     * {@code MemoryType.stable} 标记自行过滤，避免在 SQL 里硬编码类型清单。
+     */
+    public List<ScoredMemory> searchStable(String subjectKey, int topK) {
+        String sql = "SELECT " + COLS_M + ", (m.confidence * m.importance) AS path_score"
+                + " FROM user_memory m"
+                + " WHERE m.subject_key = ? AND" + ACTIVE_PREDICATE_M
+                + " ORDER BY (m.confidence * m.importance) DESC, m.updated_at DESC"
+                + " LIMIT ?";
+        return jdbcTemplate.query(sql, scoredRowMapper, subjectKey, topK);
+    }
+
+    /**
+     * 语义路 · 向量召回：查询向量与记忆向量的余弦相似度排序，
+     * 负责"用户换个说法也能命中同一偏好"
+     *
+     * @param literal       pgvector 字面量
+     * @param topK          召回条数
+     * @param minSimilarity 相似度下限
      */
     public List<ScoredMemory> searchByVector(String subjectKey, String literal, int topK, double minSimilarity) {
         String sql = "SELECT " + COLS_M + ", (1 - (m.embedding <=> CAST(? AS vector))) AS path_score"
@@ -286,23 +310,7 @@ public class UserMemoryMapper {
     }
 
     /**
-     * 检索路 B · 槽位精确路：查询命中预置槽位词时，直接按槽位取数。
-     * 回归"预算""饮食"这类关键词时，比向量路更稳、更快，且不受 embedding 抖动影响
-     *
-     * @param slotCsv 逗号分隔的槽位键（由 {@code SlotMemoryPath} 从查询词推导）
-     */
-    public List<ScoredMemory> searchBySlots(String subjectKey, String slotCsv, int topK) {
-        String sql = "SELECT " + COLS_M + ", m.confidence AS path_score"
-                + " FROM user_memory m"
-                + " WHERE m.subject_key = ? AND" + ACTIVE_PREDICATE_M
-                + "   AND m.memory_key = ANY(string_to_array(?, ','))"
-                + " ORDER BY m.confidence DESC, m.updated_at DESC"
-                + " LIMIT ?";
-        return jdbcTemplate.query(sql, scoredRowMapper, subjectKey, slotCsv, topK);
-    }
-
-    /**
-     * 检索路 C · 关键词兜底路：按 n-gram 命中数排序。
+     * 关键词路：按 n-gram 命中数排序。
      * embedding 服务不可用或中文专有名词（"稻城亚丁"）被向量稀释时，这条路保证召回
      *
      * @param keywordCsv 逗号分隔关键词（由 {@code TextKeywords} 抽取）
@@ -318,21 +326,6 @@ public class UserMemoryMapper {
                 + " ORDER BY path_score DESC, m.confidence DESC"
                 + " LIMIT ?";
         return jdbcTemplate.query(sql, scoredRowMapper, keywordCsv, subjectKey, keywordCsv, topK);
-    }
-
-    /**
-     * 检索路 D · 稳定层路（与查询无关）：按 置信度×重要度 取长期稳定的高价值记忆。
-     * <p>
-     * 这条路是"跨会话稳定复用"的保障：无论用户这轮问什么，沉淀下来的核心偏好
-     * 都会被带进上下文，不会因为一次问句措辞无关而整体丢失
-     */
-    public List<ScoredMemory> searchStable(String subjectKey, int topK) {
-        String sql = "SELECT " + COLS_M + ", (m.confidence * m.importance) AS path_score"
-                + " FROM user_memory m"
-                + " WHERE m.subject_key = ? AND" + ACTIVE_PREDICATE_M
-                + " ORDER BY (m.confidence * m.importance) DESC, m.updated_at DESC"
-                + " LIMIT ?";
-        return jdbcTemplate.query(sql, scoredRowMapper, subjectKey, topK);
     }
 
     // ==================================================================

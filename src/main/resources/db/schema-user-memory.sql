@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_user_memory_subject_status
 CREATE INDEX IF NOT EXISTS idx_user_memory_valid
     ON user_memory (subject_key, status, valid_to);
 
--- 槽位路：按主体 + 槽位精确定位
+-- 冲突校验：按主体 + 槽位精确定位（同一槽位的不同取值即潜在冲突）
 CREATE INDEX IF NOT EXISTS idx_user_memory_subject_key
     ON user_memory (subject_key, memory_key, status);
 

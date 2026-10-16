@@ -17,7 +17,8 @@ import org.springframework.util.StringUtils;
  * 且相似度阈值（{@code trip-agent.memory.vector-threshold} 等）必须重新标定。
  * <p>
  * 失败策略：向量化失败不阻断记忆写入，返回 null 让 {@code embedding} 列落空值——
- * 该条记忆仍可被槽位路与关键词路召回，只是暂时退不出现在向量路。记记忆比记向量重要。
+ * 该条记忆仍可被关键词路召回，也仍能被语义路的画像兜底带上，只是暂时进不了向量召回那一半。
+ * 记记忆比记向量重要。
  *
  * @author 金小梁
  */

@@ -142,18 +142,18 @@ trip-agent:
     conflict-similarity: 0.60
     conflict-judge-enabled: true
     semantic-search-top-k: 5
-    # ---- 多路并行检索（向量 / 槽位 / 关键词 / 稳定层）----
+    # ---- 检索（两条链路：语义路 / 关键词路）----
     retrieval-top-n: 8
+    # 语义路：向量召回
     vector-top-k: 12
     vector-threshold: 0.45
-    slot-top-k: 6
+    # 语义路：画像兜底条数，与查询无关，保证新会话第一句也能带出画像
+    stable-floor-size: 4
+    # 关键词路召回
     keyword-top-k: 8
-    stable-top-k: 6
     rrf-k: 60
-    # 各路权重：向量是主路，稳定层保证核心画像稳定复现，关键词仅作兜底
+    # 各路权重：语义是主路，关键词只在 embedding 抖动或专有名词被稀释时救场
     vector-weight: 1.0
-    slot-weight: 0.8
-    stable-weight: 0.9
     keyword-weight: 0.6
     # 单路超时：任一路慢/挂都不拖垮对话
     path-timeout-ms: 800
@@ -163,8 +163,6 @@ trip-agent:
     context-max-chars: 900
     stable-max-items: 8
     ephemeral-max-items: 4
-    # 稳定层缓存（查询无关，写入时失效）
-    context-cache-ttl-seconds: 300
     # ---- 清理 ----
     active-cap-per-subject: 200
     low-confidence-threshold: 0.3

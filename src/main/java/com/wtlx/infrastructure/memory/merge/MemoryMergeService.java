@@ -16,7 +16,6 @@ import com.wtlx.repository.mapper.UserMemoryMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -78,9 +77,6 @@ public class MemoryMergeService {
 
     @Resource
     private UserMemoryEventMapper userMemoryEventMapper;
-
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
 
     /**
      * 合并结果统计
@@ -150,9 +146,6 @@ public class MemoryMergeService {
                 }
             }
             MergeOutcome outcome = new MergeOutcome(counts);
-            if (outcome.appliedCount() > 0) {
-                invalidateContextCache(subjectKey);
-            }
             return outcome;
         } finally {
             lock.unlock();
@@ -418,17 +411,6 @@ public class MemoryMergeService {
         event.setSourceRef(sourceRef);
         event.setCreatedAt(LocalDateTime.now());
         userMemoryEventMapper.insert(event);
-    }
-
-    /**
-     * 失效稳定层缓存：记忆一变，注入上下文的缓存必须立刻过期，否则用户会看到旧偏好
-     */
-    private void invalidateContextCache(String subjectKey) {
-        try {
-            stringRedisTemplate.delete(MemoryConstants.CACHE_STABLE_PREFIX + subjectKey);
-        } catch (Exception e) {
-            log.debug("记忆缓存失效失败（等待 TTL 自然过期）: {}", e.getMessage());
-        }
     }
 
     private String truncate(String value, int max) {
