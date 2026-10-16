@@ -79,7 +79,7 @@ public class MemoryProperties {
      */
     private int semanticSearchTopK = 5;
 
-    // ==================== 检索（两条链路） ====================
+    // ==================== 检索（单路向量） ====================
 
     /**
      * 融合后最终返回、并参与上下文注入的记忆条数
@@ -87,48 +87,14 @@ public class MemoryProperties {
     private int retrievalTopN = 8;
 
     /**
-     * 语义路 · 向量召回条数
+     * 向量召回条数
      */
     private int vectorTopK = 12;
 
     /**
-     * 语义路 · 向量相似度阈值（cosine，0~1）
+     * 向量相似度阈值（cosine，0~1）
      */
     private double vectorThreshold = 0.45D;
-
-    /**
-     * 语义路 · 画像兜底条数：与查询无关，长期有效的高价值偏好，
-     * 保证新会话第一句没提偏好时也能把画像带进上下文
-     */
-    private int stableFloorSize = 4;
-
-    /**
-     * 关键词路召回条数
-     */
-    private int keywordTopK = 8;
-
-    /**
-     * RRF 平滑常数 k，越大则各路排名差异被压得越平
-     */
-    private int rrfK = 60;
-
-    /**
-     * 各路权重（RRF 加权）：语义路是主路，关键词路只在 embedding 抖动、
-     * 或中文专有名词被向量稀释时救场，故权重低
-     */
-    private double vectorWeight = 1.0D;
-
-    private double keywordWeight = 0.60D;
-
-    /**
-     * 单条检索路的超时（毫秒）：任一路慢/挂都不拖垮对话，超时该路按空结果参与融合
-     */
-    private long pathTimeoutMs = 800L;
-
-    /**
-     * 检索结果是否异步回写命中统计（hit_count / last_hit_at）
-     */
-    private boolean trackHitStats = true;
 
     // ==================== 上下文注入 ====================
 
@@ -138,39 +104,12 @@ public class MemoryProperties {
     private int contextMaxChars = 900;
 
     /**
-     * 稳定层最多注入条数
+     * 稳定层（长期有效的高价值偏好）最多注入条数
      */
     private int stableMaxItems = 8;
 
     /**
-     * 时效层最多注入条数
+     * 时效层（带有效期的行程 / 预算）最多注入条数
      */
     private int ephemeralMaxItems = 4;
-
-    // ==================== 清理 ====================
-
-    /**
-     * 单主体 ACTIVE 记忆容量上限，超出按 置信度×重要度×新鲜度 淘汰
-     */
-    private int activeCapPerSubject = 200;
-
-    /**
-     * 低置信淘汰阈值
-     */
-    private double lowConfidenceThreshold = 0.30D;
-
-    /**
-     * 低置信记忆的"冷置期"：超过该天数且从未被命中过才淘汰，避免误杀新写入的记忆
-     */
-    private int lowConfidenceStaleDays = 30;
-
-    /**
-     * 非 ACTIVE 记忆的物理保留天数，到期彻底删除
-     */
-    private int purgeRetentionDays = 90;
-
-    /**
-     * 单次清理任务处理的主体数量上限，避免一次性扫全表
-     */
-    private int cleanupBatchSubjects = 200;
 }

@@ -5,7 +5,7 @@
 --   1. pgvector 向量表（vector_store）
 --   2. ReactAgent 对话消息 / 摘要（conversation_message / conversation_summary）—— 会话内短期记忆
 --
--- 用户长期记忆（user_memory / user_memory_event / user_memory_extraction）不在此文件：
+-- 用户长期记忆（user_memory / user_memory_extraction）不在此文件：
 --   它的 DDL 是单一来源 db/schema-user-memory.sql，启动期由 MemorySchemaInitializer
 --   读取执行，本文件不再抄一份 —— 两份副本必然漂移。
 --   手工初始化时按顺序执行本文件 + db/schema-user-memory.sql 即可。

@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.Striped;
 import com.wtlx.domain.entity.memory.MemoryCandidate;
 import com.wtlx.domain.entity.memory.ScoredMemory;
 import com.wtlx.domain.entity.memory.UserMemory;
-import com.wtlx.domain.entity.memory.UserMemoryEvent;
 import com.wtlx.domain.entity.memory.enums.MemoryDecision;
 import com.wtlx.domain.entity.memory.enums.MemoryStatus;
 import com.wtlx.infrastructure.memory.MemoryLlmAgent;
@@ -12,7 +11,6 @@ import com.wtlx.infrastructure.memory.config.MemoryProperties;
 import com.wtlx.infrastructure.memory.embedding.MemoryEmbeddingService;
 import com.wtlx.infrastructure.memory.support.MemoryConstants;
 import com.wtlx.infrastructure.memory.support.MemoryNormalizer;
-import com.wtlx.repository.mapper.UserMemoryEventMapper;
 import com.wtlx.repository.mapper.UserMemoryMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +45,7 @@ import java.util.concurrent.locks.Lock;
  * 并发安全：抽取是异步的，同一个用户可能被多轮任务并行处理，因此按主体键加分段锁串行化
  * "比对 + 决策 + 落库"。跨实例并发由 {@code uk_user_memory_active_dedup} 部分唯一索引兜底
  * （捕获唯一约束冲突转 NOOP）。<b>已知限制</b>：分段锁只在单实例内有效，多实例部署时
- * 可能出现两条语义冲突的记忆同时生效，需靠清理任务收敛——这是刻意的取舍，
+ * 可能出现两条语义冲突的记忆同时生效——这是刻意的取舍，
  * 引入分布式锁会把每轮对话都串到 Redis 上，代价高于收益。
  *
  * @author 金小梁
@@ -75,9 +73,6 @@ public class MemoryMergeService {
 
     @Resource
     private UserMemoryMapper userMemoryMapper;
-
-    @Resource
-    private UserMemoryEventMapper userMemoryEventMapper;
 
     /**
      * 合并结果统计
@@ -175,9 +170,6 @@ public class MemoryMergeService {
         if (exact != null) {
             userMemoryMapper.confirm(exact.getId(), candidate.getConfidence(), candidate.getEvidence());
             record(counts, MemoryDecision.NOOP);
-            logEvent(subjectKey, sourceRef, MemoryDecision.NOOP, candidate, key,
-                    exact.getContent(), exact.getContent(),
-                    "去重键一致，判定为重复信息，仅巩固置信度", exact.getMemoryId());
             return;
         }
 
@@ -286,8 +278,6 @@ public class MemoryMergeService {
                         Math.max(target.getConfidence(), candidate.getConfidence()),
                         Math.max(target.getImportance(), candidate.getImportance()),
                         nextVersion, candidate.getEvidence());
-                logEvent(subjectKey, sourceRef, MemoryDecision.UPDATE, candidate, key,
-                        target.getContent(), decision.content(), decision.reason(), target.getMemoryId());
             }
 
             case SUPERSEDE -> {
@@ -296,16 +286,12 @@ public class MemoryMergeService {
                         dedupKey, literal, decision.reason());
                 if (newMemoryId != null) {
                     userMemoryMapper.supersede(target.getId(), newMemoryId);
-                    logEvent(subjectKey, sourceRef, MemoryDecision.SUPERSEDE, candidate, key,
-                            target.getContent(), content, decision.reason(), newMemoryId);
                 }
             }
 
             case FORGET -> {
                 UserMemory target = decision.target();
                 userMemoryMapper.expire(target.getId());
-                logEvent(subjectKey, sourceRef, MemoryDecision.FORGET, candidate, key,
-                        target.getContent(), null, decision.reason(), target.getMemoryId());
             }
 
             case NOOP -> {
@@ -313,15 +299,7 @@ public class MemoryMergeService {
                 if (target != null) {
                     userMemoryMapper.confirm(target.getId(), candidate.getConfidence(), candidate.getEvidence());
                 }
-                logEvent(subjectKey, sourceRef, MemoryDecision.NOOP, candidate, key,
-                        target == null ? null : target.getContent(),
-                        target == null ? null : target.getContent(), decision.reason(),
-                        target == null ? null : target.getMemoryId());
             }
-
-            // CLEANUP 只由清理任务产生，永远不会走到抽取合并流程；显式列出而非 default，
-            // 这样将来新增决策枚举项时编译器会立刻报错，不会被静默忽略
-            case CLEANUP -> log.warn("批量清理决策不应出现在抽取合并流程，忽略: {}", decision.decision());
         }
     }
 
@@ -353,7 +331,6 @@ public class MemoryMergeService {
         memory.setEmbeddingLiteral(literal);
         try {
             userMemoryMapper.insert(memory);
-            logEvent(subjectKey, sourceRef, MemoryDecision.ADD, candidate, key, null, content, reason, memoryId);
             return memoryId;
         } catch (DataIntegrityViolationException e) {
             // 跨实例并发下另一个线程刚写入了同一条记忆：唯一索引拦住了，等价于 NOOP
@@ -389,36 +366,6 @@ public class MemoryMergeService {
 
     private void record(Map<MemoryDecision, Integer> counts, MemoryDecision decision) {
         counts.merge(decision, 1, Integer::sum);
-    }
-
-    /**
-     * 追加审计事件（失败不影响主流程）。
-     *
-     * @param key 已归一化的槽位键，由调用方传入——此前本方法自己再归一化一次，
-     *            与 {@link #applyOne} 里的归一化重复计算，且两次归一化的入参口径一旦
-     *            被改动就可能不一致
-     */
-    private void logEvent(String subjectKey, String sourceRef, MemoryDecision decision, MemoryCandidate candidate,
-                          String key, String before, String after, String reason, String memoryId) {
-        UserMemoryEvent event = new UserMemoryEvent();
-        event.setMemoryId(memoryId);
-        event.setSubjectKey(subjectKey);
-        event.setDecision(decision.getCode());
-        event.setMemoryType(candidate.getType().getCode());
-        event.setMemoryKey(key);
-        event.setBeforeContent(truncate(before, 500));
-        event.setAfterContent(truncate(after, 500));
-        event.setReason(truncate(reason, 500));
-        event.setSourceRef(sourceRef);
-        event.setCreatedAt(LocalDateTime.now());
-        userMemoryEventMapper.insert(event);
-    }
-
-    private String truncate(String value, int max) {
-        if (value == null) {
-            return null;
-        }
-        return value.length() > max ? value.substring(0, max) : value;
     }
 
     private String abbreviate(String value) {

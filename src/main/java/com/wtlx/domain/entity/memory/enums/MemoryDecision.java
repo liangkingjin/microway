@@ -12,7 +12,8 @@ package com.wtlx.domain.entity.memory.enums;
  *     <li>{@link #FORGET} —— 用户明确否定且新信息本身无需留存，旧记忆直接置 EXPIRED</li>
  *     <li>{@link #NOOP} —— 重复信息，只做置信度巩固与证据追加</li>
  * </ul>
- * 除 {@link #CLEANUP} 外，每个决策都会在 {@code user_memory_event} 留下审计记录。
+ * 抽取合并流程只产生这五种决策；状态流转（失效 / 取代）全部由上述决策驱动，
+ * 不再单独维护清理任务的批量失效决策。
  *
  * @author 金小梁
  */
@@ -26,15 +27,10 @@ public enum MemoryDecision {
 
     FORGET("FORGET"),
 
-    NOOP("NOOP"),
+    NOOP("NOOP");
 
     /**
-     * 由清理任务触发的批量失效（过期 / 低置信 / 超容量 / 冗余），非抽取流程产生
-     */
-    CLEANUP("CLEANUP");
-
-    /**
-     * 落库编码，与 {@code user_memory_event.decision} 列取值一致
+     * 落库编码，与业务状态语义一致
      */
     private final String code;
 

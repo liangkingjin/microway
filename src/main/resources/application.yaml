@@ -144,33 +144,16 @@ trip-agent:
     conflict-similarity: 0.60
     conflict-judge-enabled: true
     semantic-search-top-k: 5
-    # ---- 检索（两条链路：语义路 / 关键词路）----
+    # ---- 检索（单路向量）----
     retrieval-top-n: 8
-    # 语义路：向量召回
+    # 语义向量召回条数
     vector-top-k: 12
     vector-threshold: 0.45
-    # 语义路：画像兜底条数，与查询无关，保证新会话第一句也能带出画像
-    stable-floor-size: 4
-    # 关键词路召回
-    keyword-top-k: 8
-    rrf-k: 60
-    # 各路权重：语义是主路，关键词只在 embedding 抖动或专有名词被稀释时救场
-    vector-weight: 1.0
-    keyword-weight: 0.6
-    # 单路超时：任一路慢/挂都不拖垮对话
-    path-timeout-ms: 800
-    track-hit-stats: true
     # ---- 上下文注入 ----
     # 注入模型的记忆文本字符上限（记忆是每轮固定开销，必须封顶）
     context-max-chars: 900
     stable-max-items: 8
     ephemeral-max-items: 4
-    # ---- 清理 ----
-    active-cap-per-subject: 200
-    low-confidence-threshold: 0.3
-    low-confidence-stale-days: 30
-    purge-retention-days: 90
-    cleanup-batch-subjects: 200
 
 # ==================== 接口文档 ====================
 springdoc:

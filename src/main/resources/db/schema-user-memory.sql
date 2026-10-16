@@ -1,7 +1,7 @@
 -- ============================================================
--- 用户长期记忆（跨会话）建表脚本 —— user_memory / user_memory_event / user_memory_extraction
+-- 用户长期记忆（跨会话）建表脚本 —— user_memory / user_memory_extraction
 --
--- 本文件是这三张表的【唯一来源】：
+-- 本文件是这两张表的【唯一来源】：
 --   1) 启动期由 MemorySchemaInitializer 读取并逐条执行（幂等，失败只告警不阻断启动）；
 --   2) 也可手工执行做兜底补建：psql -f db/schema-user-memory.sql
 -- 因此不要把这些 DDL 再抄进 schema-postgresql.sql —— 两份副本必然漂移，
@@ -90,32 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_user_memory_embedding
     ON user_memory USING hnsw (embedding vector_cosine_ops);
 
 -- ============================================================
--- 5. 记忆变更事件（审计流）—— user_memory_event
--- 记录每一次 ADD/UPDATE/SUPERSEDE/FORGET/NOOP/CLEANUP 决策，
--- 回答"这条记忆为什么被覆盖或失效"，也是抽取质量的统计口径。
--- ============================================================
-CREATE TABLE IF NOT EXISTS user_memory_event (
-    id             BIGSERIAL PRIMARY KEY,
-    memory_id      UUID,
-    subject_key    VARCHAR(80) NOT NULL,
-    decision       VARCHAR(16) NOT NULL,
-    memory_type    VARCHAR(24),
-    memory_key     VARCHAR(96),
-    before_content TEXT,
-    after_content  TEXT,
-    reason         TEXT,
-    source_ref     VARCHAR(160),
-    created_at     TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_user_memory_event_subject
-    ON user_memory_event (subject_key, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_user_memory_event_memory
-    ON user_memory_event (memory_id);
-
--- ============================================================
--- 6. 记忆抽取台账 —— user_memory_extraction
+-- 5. 记忆抽取台账 —— user_memory_extraction
 -- 抽取是异步且可能重试的，用 (主体 + 会话 + 轮次指纹) 唯一约束保证
 -- "同一轮对话只抽取一次"，避免重试把同一句话反复写进长期记忆。
 -- ============================================================

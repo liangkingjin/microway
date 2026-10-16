@@ -6,8 +6,6 @@ import com.wtlx.domain.entity.dto.Result;
 import com.wtlx.domain.entity.memory.MemoryHit;
 import com.wtlx.domain.entity.memory.MemoryOverviewVO;
 import com.wtlx.domain.entity.memory.UserMemory;
-import com.wtlx.domain.entity.memory.UserMemoryEvent;
-import com.wtlx.infrastructure.memory.cleanup.MemoryCleanupService;
 import com.wtlx.infrastructure.memory.extraction.MemoryExtractionService;
 import com.wtlx.infrastructure.memory.retrieval.MemoryRetrievalService;
 import com.wtlx.infrastructure.memory.schema.MemorySchemaInitializer;
@@ -15,7 +13,6 @@ import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
 import com.wtlx.infrastructure.memory.support.MemorySubjectResolver;
 import com.wtlx.repository.mapper.ConversationMessageMapper;
 import com.wtlx.repository.mapper.ConversationSummaryMapper;
-import com.wtlx.repository.mapper.UserMemoryEventMapper;
 import com.wtlx.repository.mapper.UserMemoryMapper;
 import com.wtlx.service.ConversationMemoryService;
 import io.swagger.annotations.Api;
@@ -37,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 用户长期记忆管理接口：观测、检索调试、按需清理、手动抽取、回溯审计。
+ * 用户长期记忆管理接口：观测、检索调试、手动抽取。
  * <p>
  * 与 {@code RagAdminController} 同族，映射在 {@code /ai/**} 下（免登录路径），
  * 调试与运维入口。身份与对话链路一致：通过 {@code userId} / {@code token} / {@code clientId}
@@ -71,16 +68,10 @@ public class MemoryController {
     private MemoryExtractionService memoryExtractionService;
 
     @Resource
-    private MemoryCleanupService memoryCleanupService;
-
-    @Resource
     private MemorySchemaInitializer memorySchemaInitializer;
 
     @Resource
     private UserMemoryMapper userMemoryMapper;
-
-    @Resource
-    private UserMemoryEventMapper userMemoryEventMapper;
 
     @Resource
     private ConversationSummaryMapper conversationSummaryMapper;
@@ -163,25 +154,6 @@ public class MemoryController {
         return Result.ok(payload);
     }
 
-    @ApiOperation("查询记忆变更审计流")
-    @GetMapping("/timeline")
-    public Result timeline(@RequestParam(required = false) String memoryId,
-                           @RequestParam(required = false) String userId,
-                           @RequestParam(required = false) String token,
-                           @RequestParam(required = false) String clientId,
-                           @RequestParam(required = false) Integer limit) {
-        int size = clampLimit(limit, 50);
-        if (StringUtils.hasText(memoryId)) {
-            return Result.ok(userMemoryEventMapper.findByMemoryId(memoryId, size));
-        }
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 memoryId 或 userId / token / clientId");
-        }
-        List<UserMemoryEvent> events = userMemoryEventMapper.findBySubject(principal.subjectKey(), size);
-        return Result.ok(events);
-    }
-
     @ApiOperation("手动触发记忆抽取（调试与补偿）")
     @PostMapping("/extract")
     public Result extract(@RequestParam String conversationId,
@@ -194,22 +166,6 @@ public class MemoryController {
         }
         int applied = memoryExtractionService.extractNow(principal.subjectKey(), conversationId);
         return Result.ok("抽取完成，落库 " + applied + " 条记忆");
-    }
-
-    @ApiOperation("按需清理：单主体收敛（过期 / 低置信 / 超容量 / 冗余合并）")
-    @PostMapping("/cleanup")
-    public Result cleanup(@RequestParam(required = false) String userId,
-                          @RequestParam(required = false) String token,
-                          @RequestParam(required = false) String clientId,
-                          @RequestParam(required = false, defaultValue = "false") boolean all) {
-        if (all) {
-            return Result.ok(memoryCleanupService.cleanupAll());
-        }
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一，或显式指定 all=true");
-        }
-        return Result.ok(memoryCleanupService.cleanupSubject(principal.subjectKey()));
     }
 
     @ApiOperation("删除单条记忆（软删，保留审计）")

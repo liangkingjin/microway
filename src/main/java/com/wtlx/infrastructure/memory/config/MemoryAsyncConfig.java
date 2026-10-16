@@ -11,14 +11,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 /**
  * 长期记忆异步线程池配置。
  * <p>
- * 拆成两个池而不是共用一个，原因是两类任务的资源诉求完全相反：
- * <ul>
- *     <li><b>抽取池</b>（{@code memoryExtractionExecutor}）：任务耗时以秒计且会调 LLM，
- *         必须低并发 + 大队列，且绝不能反向阻塞对话线程；</li>
- *     <li><b>检索池</b>（{@code memoryRetrievalExecutor}）：任务是短查询、在对话链路的关键路径上，
- *         需要高并发 + 小队列 + 快速失败，超时即降级为无长期记忆。</li>
- * </ul>
- * 若共用一个池，抽取任务把线程占满会让检索在关键时刻排队，直接拖慢对话首字延迟。
+ * 抽取池（{@code memoryExtractionExecutor}）：任务耗时以秒计且会调 LLM，
+ * 必须低并发 + 大队列，且绝不能反向阻塞对话线程。
+ * 检索不再另起线程池——它已在对话收尾 / 拦截器链路里同步执行，且单路向量召回足够快，
+ * 再包一层异步只会增加复杂度与排障成本。
  *
  * @author 金小梁
  */
@@ -42,25 +38,6 @@ public class MemoryAsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
-        executor.initialize();
-        return executor;
-    }
-
-    /**
-     * 记忆检索线程池：多路并行检索复用，短任务快速失败
-     */
-    @Bean(name = "memoryRetrievalExecutor")
-    public Executor memoryRetrievalExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(8);
-        executor.setMaxPoolSize(32);
-        executor.setQueueCapacity(64);
-        executor.setKeepAliveSeconds(60);
-        executor.setThreadNamePrefix("memory-retrieval-");
-        // 队列满时由调用线程执行：检索是对话主路径的一部分，不能因为池满而丢掉长期记忆
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(5);
         executor.initialize();
         return executor;
     }
