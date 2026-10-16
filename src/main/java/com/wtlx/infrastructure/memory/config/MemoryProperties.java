@@ -31,10 +31,16 @@ public class MemoryProperties {
     private boolean extractionEnabled = true;
 
     /**
-     * 触发抽取的最小用户消息长度：过短的寒暄（"你好""谢谢"）没有抽取价值，
-     * 直接跳过以省一次 LLM 调用
+     * 段级触发阈值：每累计这么多轮对话，才触发一次"该段会话记录"的提取。
+     * 写入链路的核心简化点——从"每轮都抽"改为"每 N 轮抽一段"
      */
-    private int extractionMinChars = 8;
+    private int extractionEveryRounds = 10;
+
+    /**
+     * 单次抽取覆盖的段大小（单位：轮）。取最近这么多轮作为待抽取记录，
+     * 故实际加载的消息条数为 {@code segmentMaxRounds * 2}
+     */
+    private int segmentMaxRounds = 10;
 
     /**
      * 候选最低置信度，低于该值的候选直接丢弃（不进入合并流程）

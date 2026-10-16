@@ -126,13 +126,15 @@ trip-agent:
   # "该合并的没合并（冗余累积）"或"不该合并的被覆盖（偏好被误改）"。
   memory:
     enabled: true
-    # ---- 抽取（异步子 Agent）----
+    # ---- 抽取（异步子 Agent，段级触发）----
     extraction-enabled: true
-    # 低于该长度的发言不抽取，直接省一次 LLM 调用
-    extraction-min-chars: 8
+    # 每累计多少轮对话触发一次"该段会话记录"的提取（写入链路简化为"每 N 轮抽一段"）
+    extraction-every-rounds: 10
+    # 单次抽取覆盖的段大小（轮）：实际加载最近 2*N 条消息
+    segment-max-rounds: 10
     # 候选低于该置信度直接丢弃
     extraction-min-confidence: 0.35
-    # 单轮候选数上限
+    # 单段候选数上限
     extraction-max-candidates: 8
     extraction-pool-size: 2
     # ---- 合并与冲突校验 ----

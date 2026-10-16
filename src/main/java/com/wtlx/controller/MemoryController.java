@@ -185,8 +185,6 @@ public class MemoryController {
     @ApiOperation("手动触发记忆抽取（调试与补偿）")
     @PostMapping("/extract")
     public Result extract(@RequestParam String conversationId,
-                          @RequestParam String userMessage,
-                          @RequestParam(required = false) String assistantReply,
                           @RequestParam(required = false) String userId,
                           @RequestParam(required = false) String token,
                           @RequestParam(required = false) String clientId) {
@@ -194,8 +192,7 @@ public class MemoryController {
         if (!principal.available()) {
             return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
         }
-        int applied = memoryExtractionService.extractNow(
-                principal.subjectKey(), conversationId, userMessage, assistantReply);
+        int applied = memoryExtractionService.extractNow(principal.subjectKey(), conversationId);
         return Result.ok("抽取完成，落库 " + applied + " 条记忆");
     }
 

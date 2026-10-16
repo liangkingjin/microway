@@ -2,6 +2,7 @@ package com.wtlx.infrastructure.memory.extraction;
 
 import com.wtlx.domain.entity.conversation.ConversationMessage;
 import com.wtlx.domain.entity.memory.MemoryCandidate;
+import com.wtlx.infrastructure.memory.MemoryLlmAgent;
 import com.wtlx.infrastructure.memory.config.MemoryProperties;
 import com.wtlx.infrastructure.memory.merge.MemoryMergeService;
 import com.wtlx.infrastructure.memory.support.MemoryNormalizer;
@@ -13,24 +14,31 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 记忆抽取调度服务：负责"什么时候抽、抽几次、抽完交给谁"。
+ * 记忆抽取调度服务：负责"什么时候抽、抽哪段、抽完交给谁"。
  * <p>
- * 三个关键设计：
+ * <b>简化后的写入链路</b>（相对此前每轮都抽、且带启发式前置过滤的版本）：
  * <ol>
- *     <li><b>全异步</b>——抽取要调 LLM，耗时以秒计。它挂在 SSE 流的收尾处，
- *         一旦同步执行就会让用户看到回答写完了、连接却迟迟不关。因此只在
- *         {@code memoryExtractionExecutor} 里跑，失败仅记日志。</li>
- *     <li><b>幂等</b>——先抢占台账（{@code INSERT ... ON CONFLICT DO NOTHING}）再干活，
- *         保证同一轮对话无论重试几次、在几个实例上被触发，都只抽取一次。</li>
- *     <li><b>成本前置过滤</b>——寒暄、纯提问、超短消息在调模型之前就被挡掉。
- *         记忆抽取是"每轮都可能付费"的后台任务，过滤器比提示词更能决定长期成本。</li>
+ *     <li><b>段级触发</b>——每累计 {@code extraction-every-rounds}（默认 10）轮对话，
+ *         才触发一次"该段会话记录"的提取，而不是每轮都抽。触发器是内存计数器，
+ *         达到阈值后重置并异步抽取最近 {@code segment-max-rounds} 轮；</li>
+ *     <li><b>提取完全基于 LLM</b>——前置的"53 个偏好信号词 + 长度阈值"过滤已移除，
+ *         改由抽取 Agent 综合整段对话自行判断是否需要抽取；无需提取时直接返回空，
+ *         后续合并自然跳过；</li>
+ *     <li><b>冲突校验后置</b>——提取出的候选交给 {@link MemoryMergeService} 做冲突校验，
+ *         检测并标记（必要时消解）新记录与已有数据间的冲突，只有过闸的才落库。</li>
  * </ol>
- * 抽取结果不直接落库，而是交给 {@link MemoryMergeService} 做合并与冲突校验——
- * 这是"记忆不被幻觉污染"的关键闸门。
+ * <p>
+ * 与先前版本一致的两个设计保留：<b>全异步</b>（抽取挂在对话收尾，不挡 SSE）与
+ * <b>合并闸门隔离"理解"与"裁决"</b>（子 Agent 只产出候选、不写库）。
+ * <p>
+ * <b>已知限制</b>：段触发器是内存计数器，单实例内准确；应用重启会丢失计数（最坏是某段被多抽一次，
+ * 合并闸门的去重会吸收重复），多实例部署下各实例各自计数、可能各抽各的段——这与本项目
+ * "单实例、不引入分布式锁"的取舍一致（见 {@link MemoryMergeService}）。
  *
  * @author 金小梁
  */
@@ -39,39 +47,15 @@ import java.util.concurrent.Executor;
 public class MemoryExtractionService {
 
     /**
-     * 偏好信号词：出现即认为本轮大概率含个性化信息，值得花一次 LLM 调用。
-     * <p>
-     * 宁可漏抽也不滥抽：漏抽的信息会在后续对话里再次出现（用户偏好是稳定的），
-     * 而滥抽产生的噪声记忆一旦落库，就要靠冲突校验与清理去收拾。
-     * <p>
-     * 用 {@link Set#of} 构建，<b>元素必须互不重复</b>——重复会让类初始化抛
-     * {@code IllegalArgumentException}。词表增删后务必确认无重复项。
+     * 每个会话累计的"未触发轮数"；达到阈值即触发一段抽取，然后清零
      */
-    private static final Set<String> PREFERENCE_HINTS = Set.of(
-            "我喜欢", "我不喜欢", "我讨厌", "我偏好", "我想去", "我打算", "我计划", "我准备",
-            "预算", "忌口", "不吃", "吃辣", "素食", "清真", "过敏", "恐高", "晕车",
-            "喜欢", "讨厌", "不想", "别给我", "不要", "避开", "受不了",
-            "一个人", "独自", "和朋友", "和女朋友", "和男朋友", "带娃", "带孩子",
-            "爸妈", "父母", "同事", "穷游", "深度游", "打卡", "休闲", "徒步",
-            "摄影", "观星", "露营", "自驾", "高铁", "民宿", "青旅", "住宿",
-            "拍照", "美食", "博物馆", "历史", "人文", "自然风光"
-    );
-
-    /**
-     * 长消息阈值：超过该长度的发言即使用户没有用偏好句式，也大概率包含可沉淀信息
-     */
-    private static final int LONG_MESSAGE_CHARS = 20;
-
-    /**
-     * 会话摘要在提示词里的最大条数（只取本轮之前的历史，帮助模型解析指代）
-     */
-    private static final int DIGEST_MAX_MESSAGES = 4;
+    private final ConcurrentHashMap<String, AtomicInteger> pendingRounds = new ConcurrentHashMap<>();
 
     @Resource
     private MemoryProperties memoryProperties;
 
     @Resource
-    private MemoryExtractionAgent memoryExtractionAgent;
+    private MemoryLlmAgent memoryLlmAgent;
 
     @Resource
     private MemoryMergeService memoryMergeService;
@@ -89,137 +73,98 @@ public class MemoryExtractionService {
     private Executor memoryExtractionExecutor;
 
     /**
-     * 异步抽取并落库。
+     * 每轮对话收尾时调用：累计轮数，达到阈值才异步抽取该段会话记录。
      * <p>
-     * 调用点位于对话流收尾（assistant 回复已落库之后），因此本方法<b>必须立即返回</b>。
+     * 入参只需身份与会话——要抽取的"段"直接从会话库里取最近若干轮，
+     * 不再依赖调用方逐轮透传 user/assistant 文本。
      *
      * @param subjectKey     记忆主体键；为 null 时静默跳过（未登录且无 clientId）
-     * @param conversationId 会话 id，用于取短期上下文与台账幂等
-     * @param userMessage    用户本轮发言
-     * @param assistantReply 助手本轮回复
+     * @param conversationId 会话 id，用于取该段记录与冲突校验的作用域
      */
-    public void extractAsync(String subjectKey, String conversationId, String userMessage, String assistantReply) {
+    public void extractAsync(String subjectKey, String conversationId) {
         if (!StringUtils.hasText(subjectKey) || !StringUtils.hasText(conversationId)) {
             return;
         }
         if (!memoryProperties.isEnabled() || !memoryProperties.isExtractionEnabled()) {
             return;
         }
-        if (!shouldExtract(userMessage)) {
-            log.debug("本轮不满足抽取条件，跳过长期记忆抽取, conversationId: {}", conversationId);
-            return;
+        AtomicInteger counter = pendingRounds.computeIfAbsent(conversationId, k -> new AtomicInteger(0));
+        if (counter.incrementAndGet() < memoryProperties.getExtractionEveryRounds()) {
+            return; // 未累计满阈值，本轮不抽
         }
-        String turnHash = memoryNormalizer.contentHash(conversationId + "|" + userMessage);
+        counter.set(0); // 触发后立即清零，准备下一段
         try {
-            memoryExtractionExecutor.execute(() ->
-                    doExtract(subjectKey, conversationId, turnHash, userMessage, assistantReply));
+            memoryExtractionExecutor.execute(() -> extractSegmentNow(subjectKey, conversationId));
         } catch (Exception e) {
-            // 线程池拒绝（极端情况，CallerRunsPolicy 之后仍失败）：不能影响对话收尾
-            log.warn("记忆抽取任务提交失败，本轮不抽取: {}", e.getMessage());
+            // 线程池拒绝（极端情况）：不能影响对话收尾
+            log.warn("记忆段抽取任务提交失败，本段不抽取: {}", e.getMessage());
         }
     }
 
     /**
-     * 同步抽取（管理接口手动触发 / 补偿），会阻塞调用线程，仅用于调试与回填
+     * 手动触发（管理接口 / 调试 / 补偿）：同步抽取当前会话最近一段，阻塞调用线程
      *
      * @return 实际落库（非 NOOP）的记忆条数
      */
-    public int extractNow(String subjectKey, String conversationId, String userMessage, String assistantReply) {
+    public int extractNow(String subjectKey, String conversationId) {
         if (!StringUtils.hasText(subjectKey) || !StringUtils.hasText(conversationId)) {
             return 0;
         }
-        String turnHash = memoryNormalizer.contentHash(conversationId + "|" + userMessage);
-        return doExtract(subjectKey, conversationId, turnHash, userMessage, assistantReply);
+        return extractSegmentNow(subjectKey, conversationId);
     }
 
     /**
-     * 抽取主体流程：抢占台账 → 取上下文 → 调子 Agent → 合并落库 → 回填台账
+     * 抽取一段会话记录并做冲突校验后落库
      *
      * @return 实际落库条数
      */
-    private int doExtract(String subjectKey, String conversationId, String turnHash,
-                          String userMessage, String assistantReply) {
-        // 1. 幂等抢占：抢不到说明该轮已被处理过
-        if (!memoryExtractionMapper.tryClaimTurn(subjectKey, conversationId, turnHash)) {
-            log.debug("该轮对话已抽取过，跳过, conversationId: {}, turnHash: {}", conversationId, turnHash);
-            return 0;
-        }
+    private int extractSegmentNow(String subjectKey, String conversationId) {
         try {
-            // 2. 拼接会话摘要：让模型能解析"那住宿呢"这类指代，避免抽出无主语候选
-            String digest = buildSessionDigest(conversationId);
-
-            // 3. 抽取候选
-            List<MemoryCandidate> candidates = memoryExtractionAgent.extract(userMessage, assistantReply, digest);
-            if (candidates.isEmpty()) {
-                memoryExtractionMapper.finishTurn(subjectKey, conversationId, turnHash, 0, 0);
+            int messageLimit = memoryProperties.getSegmentMaxRounds() * 2;
+            List<ConversationMessage> segment = conversationMemoryService.loadRecentMessages(conversationId, messageLimit);
+            if (segment.isEmpty()) {
                 return 0;
             }
+
+            // 提取完全基于 LLM：是否值得抽取由模型判断，无需提取时返回空
+            List<MemoryCandidate> candidates = memoryLlmAgent.extractSegment(segment);
+            if (candidates.isEmpty()) {
+                memoryExtractionMapper.recordSegment(subjectKey, conversationId,
+                        segmentHash(conversationId, segment), 0, 0);
+                return 0;
+            }
+
             // 候选数上限：模型偶尔一次刷出过多低价值候选，截断比逐条校验更省事
             int maxCandidates = memoryProperties.getExtractionMaxCandidates();
             List<MemoryCandidate> limited = candidates.size() > maxCandidates
                     ? candidates.subList(0, maxCandidates)
                     : candidates;
 
-            // 4. 合并 / 冲突校验后落库
-            MemoryMergeService.MergeOutcome outcome = memoryMergeService.merge(subjectKey, conversationId, limited);
+            // 冲突校验（检测并标记 / 必要时消解新记录与已有数据间的冲突）后落库
+            MemoryMergeService.MergeOutcome outcome =
+                    memoryMergeService.merge(subjectKey, conversationId, limited);
 
-            // 5. 回填台账，供观测抽取质量（候选数 / 落库数的比例）
-            memoryExtractionMapper.finishTurn(subjectKey, conversationId, turnHash,
-                    limited.size(), outcome.appliedCount());
-            log.info("长期记忆抽取完成, subject: {}, 候选 {} 条, 落库 {} 条, 决策分布 {}",
+            memoryExtractionMapper.recordSegment(subjectKey, conversationId,
+                    segmentHash(conversationId, segment), limited.size(), outcome.appliedCount());
+            log.info("长期记忆段抽取完成, subject: {}, 候选 {} 条, 落库 {} 条, 决策分布 {}",
                     subjectKey, limited.size(), outcome.appliedCount(), outcome.summary());
             return outcome.appliedCount();
         } catch (Exception e) {
-            // 不可恢复错误：释放台账以便下次重试（重试上限由调用频率天然限制——
-            // 同一轮对话不会再触发第二次，除非人工补偿）
-            memoryExtractionMapper.releaseTurn(subjectKey, conversationId, turnHash);
-            log.error("长期记忆抽取失败, subject: {}, conversationId: {}", subjectKey, conversationId, e);
+            log.error("长期记忆段抽取失败, subject: {}, conversationId: {}", subjectKey, conversationId, e);
             return 0;
         }
     }
 
     /**
-     * 成本前置过滤：判断本轮是否值得抽取
+     * 段指纹：以会话 id + 段内消息 id 序列算出，保证同一段记录只在台账里记一行
      */
-    private boolean shouldExtract(String userMessage) {
-        if (!StringUtils.hasText(userMessage)) {
-            return false;
-        }
-        String text = userMessage.trim();
-        if (text.length() < memoryProperties.getExtractionMinChars()) {
-            return false;
-        }
-        for (String hint : PREFERENCE_HINTS) {
-            if (text.contains(hint)) {
-                return true;
+    private String segmentHash(String conversationId, List<ConversationMessage> segment) {
+        StringBuilder ids = new StringBuilder(conversationId);
+        for (ConversationMessage message : segment) {
+            if (message != null && message.getId() != null) {
+                ids.append('#').append(message.getId());
             }
         }
-        return text.length() >= LONG_MESSAGE_CHARS;
-    }
-
-    /**
-     * 取本轮之前的历史消息拼成摘要串（最近的在前，帮助解析指代）。
-     * 当前轮的"用户发言 + 助手回复"已落库，故从末尾裁掉两条
-     */
-    private String buildSessionDigest(String conversationId) {
-        try {
-            List<ConversationMessage> recent =
-                    conversationMemoryService.loadRecentMessages(conversationId, DIGEST_MAX_MESSAGES + 2);
-            if (recent.size() <= 2) {
-                return null;
-            }
-            List<ConversationMessage> history = recent.subList(0, recent.size() - 2);
-            StringBuilder sb = new StringBuilder();
-            for (ConversationMessage message : history) {
-                String content = message.getContent() == null ? "" : message.getContent();
-                sb.append(message.getRole().getCode().equals("USER") ? "用户：" : "助手：")
-                        .append(content.length() > 150 ? content.substring(0, 150) + "..." : content)
-                        .append('\n');
-            }
-            return sb.length() == 0 ? null : sb.toString();
-        } catch (Exception e) {
-            log.debug("构建会话摘要失败，抽取时将不带上下文: {}", e.getMessage());
-            return null;
-        }
+        return memoryNormalizer.contentHash(ids.toString());
     }
 }

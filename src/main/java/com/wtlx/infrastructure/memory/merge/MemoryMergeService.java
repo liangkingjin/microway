@@ -7,6 +7,7 @@ import com.wtlx.domain.entity.memory.UserMemory;
 import com.wtlx.domain.entity.memory.UserMemoryEvent;
 import com.wtlx.domain.entity.memory.enums.MemoryDecision;
 import com.wtlx.domain.entity.memory.enums.MemoryStatus;
+import com.wtlx.infrastructure.memory.MemoryLlmAgent;
 import com.wtlx.infrastructure.memory.config.MemoryProperties;
 import com.wtlx.infrastructure.memory.embedding.MemoryEmbeddingService;
 import com.wtlx.infrastructure.memory.support.MemoryConstants;
@@ -70,7 +71,7 @@ public class MemoryMergeService {
     private MemoryEmbeddingService memoryEmbeddingService;
 
     @Resource
-    private MemoryConflictJudge memoryConflictJudge;
+    private MemoryLlmAgent memoryLlmAgent;
 
     @Resource
     private UserMemoryMapper userMemoryMapper;
@@ -216,7 +217,7 @@ public class MemoryMergeService {
                             List<ScoredMemory> nearBy, List<ScoredMemory> related, double bestSimilarity) {
         // 分支一：存在同槽位记忆 —— 槽位相同即"同一件事"的强信号，交模型裁决
         if (!sameSlot.isEmpty()) {
-            MemoryConflictJudge.Verdict verdict = memoryConflictJudge.judge(candidate, related);
+            MemoryLlmAgent.Verdict verdict = memoryLlmAgent.judge(candidate, related);
             if (verdict != null) {
                 return fromVerdict(verdict, related, content);
             }
@@ -239,7 +240,7 @@ public class MemoryMergeService {
 
         // 分支三：语义灰区（相似但不到重复线）—— 可能相关，可能只是同域话题，交模型判断
         if (bestSimilarity >= memoryProperties.getConflictSimilarity()) {
-            MemoryConflictJudge.Verdict verdict = memoryConflictJudge.judge(candidate, related);
+            MemoryLlmAgent.Verdict verdict = memoryLlmAgent.judge(candidate, related);
             if (verdict != null) {
                 return fromVerdict(verdict, related, content);
             }
@@ -253,7 +254,7 @@ public class MemoryMergeService {
     /**
      * 把模型判定映射为内部决策（含目标记忆解析）
      */
-    private Decision fromVerdict(MemoryConflictJudge.Verdict verdict, List<ScoredMemory> related, String content) {
+    private Decision fromVerdict(MemoryLlmAgent.Verdict verdict, List<ScoredMemory> related, String content) {
         MemoryDecision decision = verdict.decision();
         UserMemory target = null;
         if (verdict.targetIndex() >= 0 && verdict.targetIndex() < related.size()) {

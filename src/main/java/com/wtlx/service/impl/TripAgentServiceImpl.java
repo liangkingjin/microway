@@ -290,9 +290,10 @@ public class TripAgentServiceImpl implements TripAgentService {
                 // 长期记忆抽取：一轮对话结束后的异步沉淀。
                 // 放在这里而不是模型链路里，是因为抽取要调 LLM（秒级），
                 // 必须与"回答已经生成完"解耦——用户不该因为后台在总结经验而多等一秒。
-                // 抽取内部自带幂等（同一轮只处理一次）与成本前置过滤
+                // 触发策略改为"每累计 10 轮才抽一段（最近 10 轮）"，由调度服务内部计数；
+                // 是否确需提取由抽取 Agent（LLM）自行判断，无需提取时不落库。
                 if (subjectKey != null && !answer.isEmpty()) {
-                    memoryExtractionService.extractAsync(subjectKey, conversationId, message, answer.toString());
+                    memoryExtractionService.extractAsync(subjectKey, conversationId);
                 }
                 ConversationContextHolder.clear();
                 generationRegistry.unregister(requestId);
