@@ -36,9 +36,10 @@ import java.util.Map;
 /**
  * 用户长期记忆管理接口：观测、检索调试、手动抽取。
  * <p>
- * 与 {@code RagAdminController} 同族，映射在 {@code /ai/**} 下（免登录路径），
- * 调试与运维入口。身份与对话链路一致：通过 {@code userId} / {@code token} / {@code clientId}
- * 解析记忆主体，缺一不可时返回失败而不是"落一个默认主体"——记忆串号比接口报错严重得多。
+ * 与 {@code RagAdminController} 同族，映射在 {@code /ai/**} 下。
+ * <b>所有接口要求登录</b>（{@code LoginInterceptor} 已在 {@code /ai/**} 生效），
+ * 记忆主体统一取当前登录用户，不支持指定他人——越权读写他人画像比接口报错严重得多，
+ * 因此根本没有"换一个 userId 查查"这个入口。
  *
  * @author 金小梁
  */
@@ -85,15 +86,11 @@ public class MemoryController {
     @ApiOperation("记忆全景：短期记忆与长期记忆对照")
     @GetMapping("/overview")
     public Result overview(@RequestParam(required = false) String conversationId,
-                           @RequestParam(required = false) String query,
-                           @RequestParam(required = false) String userId,
-                           @RequestParam(required = false) String token,
-                           @RequestParam(required = false) String clientId) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+                           @RequestParam(required = false) String query) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
 
         MemoryOverviewVO overview = new MemoryOverviewVO();
-        overview.setSubjectKey(principal.available() ? principal.subjectKey() : null);
-        overview.setAuthenticated(principal.authenticated());
+        overview.setSubjectKey(principal.subjectKey());
 
         // 短期记忆：作用域是会话，换 threadId 就变
         if (StringUtils.hasText(conversationId)) {
@@ -102,50 +99,35 @@ public class MemoryController {
 
         // 长期记忆：作用域是用户，换 threadId 不变
         MemoryOverviewVO.LongTermScope longTerm = new MemoryOverviewVO.LongTermScope();
-        if (principal.available()) {
-            longTerm.setActiveCount(userMemoryMapper.countActive(principal.subjectKey()));
-            longTerm.setCountByType(userMemoryMapper.countActiveByType(principal.subjectKey()));
-            if (StringUtils.hasText(query)) {
-                List<MemoryHit> hits = memoryRetrievalService.retrieve(principal.subjectKey(), query);
-                overview.setHits(hits);
-                longTerm.setHitCount(hits.size());
-            }
+        longTerm.setActiveCount(userMemoryMapper.countActive(principal.subjectKey()));
+        longTerm.setCountByType(userMemoryMapper.countActiveByType(principal.subjectKey()));
+        if (StringUtils.hasText(query)) {
+            List<MemoryHit> hits = memoryRetrievalService.retrieve(principal.subjectKey(), query);
+            overview.setHits(hits);
+            longTerm.setHitCount(hits.size());
         }
         overview.setLongTerm(longTerm);
         return Result.ok(overview);
     }
 
-    @ApiOperation("列举某主体的长期记忆")
+    @ApiOperation("列举当前用户的长期记忆")
     @GetMapping("/list")
-    public Result list(@RequestParam(required = false) String userId,
-                       @RequestParam(required = false) String token,
-                       @RequestParam(required = false) String clientId,
-                       @RequestParam(required = false) String type,
+    public Result list(@RequestParam(required = false) String type,
                        @RequestParam(required = false, defaultValue = "ACTIVE") String status,
                        @RequestParam(required = false) Integer limit) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
-        }
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
         List<UserMemory> memories = userMemoryMapper.listBySubject(
                 principal.subjectKey(), type, status, clampLimit(limit, 50));
         return Result.ok(memories);
     }
 
-    @ApiOperation("多路并行检索调试（含各路原始得分）")
+    @ApiOperation("向量检索调试（含命中相似度）")
     @GetMapping("/search")
     public Result search(@RequestParam String query,
-                         @RequestParam(required = false) String userId,
-                         @RequestParam(required = false) String token,
-                         @RequestParam(required = false) String clientId,
                          @RequestParam(required = false) Integer topN) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
-        }
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
         List<MemoryHit> hits = memoryRetrievalService.retrieve(
                 principal.subjectKey(), query, clampLimit(topN, 8));
-        // 同时回传各路命中分布，便于判断"是哪条路在起作用"
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("subjectKey", principal.subjectKey());
         payload.put("query", query);
@@ -156,41 +138,24 @@ public class MemoryController {
 
     @ApiOperation("手动触发记忆抽取（调试与补偿）")
     @PostMapping("/extract")
-    public Result extract(@RequestParam String conversationId,
-                          @RequestParam(required = false) String userId,
-                          @RequestParam(required = false) String token,
-                          @RequestParam(required = false) String clientId) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
-        }
+    public Result extract(@RequestParam String conversationId) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
         int applied = memoryExtractionService.extractNow(principal.subjectKey(), conversationId);
         return Result.ok("抽取完成，落库 " + applied + " 条记忆");
     }
 
-    @ApiOperation("删除单条记忆（软删，保留审计）")
+    @ApiOperation("删除单条记忆（软删）")
     @DeleteMapping("/{memoryId}")
-    public Result deleteOne(@PathVariable String memoryId,
-                            @RequestParam(required = false) String userId,
-                            @RequestParam(required = false) String token,
-                            @RequestParam(required = false) String clientId) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
-        }
+    public Result deleteOne(@PathVariable String memoryId) {
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
         int rows = userMemoryMapper.markDeleted(principal.subjectKey(), memoryId);
         return rows > 0 ? Result.ok("已删除") : Result.fail("未找到该记忆或已被删除");
     }
 
-    @ApiOperation("清空某主体的全部长期记忆（物理删除，含历史行）")
+    @ApiOperation("清空当前用户的全部长期记忆（物理删除，含历史行）")
     @DeleteMapping
-    public Result deleteSubject(@RequestParam(required = false) String userId,
-                                @RequestParam(required = false) String token,
-                                @RequestParam(required = false) String clientId) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
-        if (!principal.available()) {
-            return Result.fail("未解析到记忆主体：请提供 userId、token 或 clientId 之一");
-        }
+    public Result deleteSubject() {
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
         int rows = userMemoryMapper.deleteBySubject(principal.subjectKey());
         return Result.ok("已清空 " + rows + " 条记忆");
     }

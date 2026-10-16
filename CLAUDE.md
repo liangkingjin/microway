@@ -73,7 +73,9 @@ com.wtlx.controller  com.wtlx.service        com.wtlx.service.impl              
 
 - 取当前用户一律 `UserHolder.getUser()`；在排除路径上取会 NPE。
 - 登录返回的 `data` 就是裸 token 字符串。
-- 排除路径（免登录）：`/shop/**`、`/voucher/**`、`/shop-type/**`、`/upload/**`、`/imgs/**`、`/video/**`、`/blog/hot`、`/user/code`、`/user/login`、`/guides/**`、`/scenic-spots/**`、`/ai/**`、`/doc.html`、`/webjars/**`。注意 `MvcConfig` 里 `"//provinces/**"` 多了一个斜杠，provinces 实际**未**被排除。
+- 排除路径（免登录）：`/shop/**`、`/voucher/**`、`/shop-type/**`、`/upload/**`、`/imgs/**`、`/video/**`、`/blog/hot`、`/user/code`、`/user/login`、`/guides/**`、`/scenic-spots/**`、`/doc.html`、`/webjars/**`。注意 `MvcConfig` 里 `"//provinces/**"` 多了一个斜杠，provinces 实际**未**被排除。
+- **`/ai/**` 已于 2026-10-16 移出免登录名单**：AI 对话与 `/ai/memory/**` 全部要求登录，可直接 `UserHolder.getUser()`。
+  SSE 特殊点只有一个：浏览器原生 `EventSource` 设不了请求头，故 `RefreshTokenInterceptor` 在 `authorization` 头为空时会再读一次 `?token=` 查询参数——两路拿到的是同一个 token，校验逻辑无差别。前端 `ai.js` 的普通 `fetch`（history / cancel）照常带 header。
 
 ### 三套存储
 
@@ -102,7 +104,7 @@ AI 的 PG 数据源和 `PgVectorStore` 在 `DataSourceConfig` 里手工装配（
 ### 请求链路
 
 ```
-GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, 免登录)
+GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, **要求登录**)
   → AiController.doChatWithReactAgent
   → TripAgentServiceImpl.chatStream          返回 SseEmitter，整体丢进 CompletableFuture.runAsync
   → ReactAgent.stream(message, RunnableConfig)   Flux<NodeOutput>

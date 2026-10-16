@@ -30,7 +30,7 @@ public class UserMemory {
     private String memoryId;
 
     /**
-     * 记忆主体键：登录用户为 {@code user:<userId>}，游客为 {@code guest:<clientId>}。
+     * 记忆主体键，恒为登录用户的 {@code user:<userId>}。
      * 这是长期记忆的作用域边界，所有读写必须带它，防止跨用户串记忆
      */
     private String subjectKey;

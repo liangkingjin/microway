@@ -5,28 +5,41 @@
 // 一律使用 fetch / EventSource
 const AI_BASE = '/api'
 
+// AI 接口已要求登录：普通 fetch 统一带 authorization 头，SSE 只能走查询参数
+// （浏览器原生 EventSource 无法设置任何请求头，服务端由拦截器读它建立登录态）
+function getToken() {
+  return sessionStorage.getItem('token') || ''
+}
+
+function authHeaders() {
+  const token = getToken()
+  return token ? { authorization: token } : {}
+}
+
 // GET /ai/react/history?threadId= → { threadId, messages: [{role, content, cards, time}] }
 // role 为 USER/ASSISTANT，按时间正序
 // cards 为该条助手回复附带的检索卡片（JSON 数组），未检索到时为空数组——历史恢复靠它
 // 注意：返回的是「展示用历史」，不含摘要 SystemMessage；模型上下文由服务端内部加载
 export async function fetchHistory(threadId) {
   if (!threadId) return { context: [] }
-  const res = await fetch(`${AI_BASE}/ai/react/history?threadId=${encodeURIComponent(threadId)}`)
+  const res = await fetch(`${AI_BASE}/ai/react/history?threadId=${encodeURIComponent(threadId)}`, {
+    headers: authHeaders()
+  })
   return res.json()
 }
 
 // DELETE /ai/react/history?threadId= 清空该线程记忆
 export function deleteHistory(threadId) {
-  return fetch(`${AI_BASE}/ai/react/history?threadId=${encodeURIComponent(threadId)}`, { method: 'DELETE' })
+  return fetch(`${AI_BASE}/ai/react/history?threadId=${encodeURIComponent(threadId)}`, {
+    method: 'DELETE',
+    headers: authHeaders()
+  })
 }
 
-// SSE GET /ai/react/trip/chat?message=&threadId=&requestId=&token=&clientId=
+// SSE GET /ai/react/trip/chat?message=&threadId=&requestId=&token=
 // requestId 由前端生成，是取消这条流的唯一凭据（多实例下服务端靠它定位到持流实例）
-// token / clientId 用于服务端解析「长期记忆主体」（跨会话用户画像）：
-//   - EventSource 无法携带 authorization 请求头，故 token 只能走查询参数，
-//     服务端回查 Redis 登录态拿到 userId；
-//   - 未登录时用 localStorage 持久化的 clientId，保证游客的偏好也能跨会话复用。
-//   两者都缺省时服务端只启用「会话内短期记忆」，不影响对话本身。
+// token 走查询参数：EventSource 设不了请求头，这是它的协议限制；
+// 服务端据此建立登录态，未登录直接被拦在门口（无游客降级）。
 // 协议（ReactAgent 流式，输出形态：结论正文 + 思考步骤 + 关联卡片）：
 //   event: thinking  —— 思考步骤，JSON { seq, type, label, text }，同 seq 重复表示更新该步骤
 //                       type 取值：tool=工具调用 / retrieval=检索 / reasoning=推理 / node=图节点
@@ -38,41 +51,12 @@ export function deleteHistory(threadId) {
 // 连接会在服务端 complete 后关闭（无 [DONE] 哨兵）
 // done / cancelled 为 JSON，前端解析失败时按纯文本兜底，保证协议灰度期不白屏
 export function openChatStream(message, threadId, requestId) {
-  const { token, clientId } = resolveMemoryIdentity()
   const qs =
     `message=${encodeURIComponent(message)}` +
     `&threadId=${encodeURIComponent(threadId)}` +
     `&requestId=${encodeURIComponent(requestId || '')}` +
-    `&token=${encodeURIComponent(token)}` +
-    `&clientId=${encodeURIComponent(clientId)}`
+    `&token=${encodeURIComponent(getToken())}`
   return new EventSource(`${AI_BASE}/ai/react/trip/chat?${qs}`)
-}
-
-// 长期记忆主体标识：登录态优先用 token（服务端换 userId），否则退回设备级 clientId。
-// clientId 持久化在 localStorage（sessionStorage 里的 token 会随标签页关闭失效，不适合当身份）。
-const CLIENT_ID_KEY = 'ai_client_id'
-
-function resolveMemoryIdentity() {
-  const token = sessionStorage.getItem('token') || ''
-  let clientId = ''
-  try {
-    clientId = localStorage.getItem(CLIENT_ID_KEY) || ''
-    if (!clientId) {
-      clientId = randomId()
-      localStorage.setItem(CLIENT_ID_KEY, clientId)
-    }
-  } catch (e) {
-    // 隐私模式下 localStorage 不可用：降级为不带 clientId，仅短期记忆生效
-    clientId = ''
-  }
-  return { token, clientId }
-}
-
-function randomId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 }
 
 // POST /ai/react/cancel?requestId= 取消一次正在进行的生成（可打到任意实例，服务端内部广播）
@@ -80,7 +64,8 @@ function randomId() {
 export async function cancelChat(requestId) {
   if (!requestId) return { status: 'rejected' }
   const res = await fetch(`${AI_BASE}/ai/react/cancel?requestId=${encodeURIComponent(requestId)}`, {
-    method: 'POST'
+    method: 'POST',
+    headers: authHeaders()
   })
   return res.json()
 }

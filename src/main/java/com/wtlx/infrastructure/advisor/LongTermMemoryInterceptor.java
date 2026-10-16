@@ -56,7 +56,8 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
         try {
             String subjectKey = resolveSubjectKey(request);
             if (!StringUtils.hasText(subjectKey)) {
-                // 未登录且前端未提供 clientId：本轮不做长期记忆，短期记忆照常工作
+                // 无登录态：正常链路下不会发生（'/ai/**' 已要求登录）。
+                // 兜底跳过长期记忆注入，对话照常进行——记忆是增强不是依赖
                 return handler.call(request);
             }
             String query = resolveLatestUserMessage(request);

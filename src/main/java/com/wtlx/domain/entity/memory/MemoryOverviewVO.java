@@ -19,14 +19,9 @@ import java.util.Map;
 public class MemoryOverviewVO {
 
     /**
-     * 记忆主体键（长期记忆作用域）
+     * 记忆主体键（长期记忆作用域）；本接口已要求登录，恒为当前用户
      */
     private String subjectKey;
-
-    /**
-     * 是否为登录用户
-     */
-    private boolean authenticated;
 
     /**
      * 长期记忆命中明细（本次按 query 检索的结果）

@@ -27,11 +27,6 @@ public final class MemoryConstants {
     public static final String SUBJECT_USER_PREFIX = "user:";
 
     /**
-     * 游客主体前缀（无登录态时用前端持久化的客户端 id 兜底）
-     */
-    public static final String SUBJECT_GUEST_PREFIX = "guest:";
-
-    /**
      * 来源类型：由对话抽取。当前 {@code source_type} 只有这一种取值
      * （显式设置尚未开放入口，故不预留 {@code EXPLICIT} 常量）
      */

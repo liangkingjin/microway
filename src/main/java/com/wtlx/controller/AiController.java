@@ -56,29 +56,23 @@ public class AiController {
      * 流式调用基于 SpringAI Alibaba ReactAgent 的旅游规划智能体
      *
      * @param message   用户消息
-     * @param threadId  会话线程ID（可选），用于记忆隔离
+     * @param threadId  会话线程ID（可选），用于短期记忆隔离
      * @param requestId 本次生成请求ID（可选），由前端生成，用于取消这条流；缺省时服务端补一个
-     * @param userId    用户ID（可选），显式指定长期记忆主体
-     * @param token     登录 token（可选）；{@code /ai/**} 免登录且 EventSource 无法带请求头，
-     *                  因此约定用查询参数透传，服务端回查 Redis 登录态解析出用户身份
-     * @param clientId  匿名客户端ID（可选），前端 localStorage 持久化，用于游客的跨会话记忆
      * @return SSE 流
      */
     @GetMapping(value = "/react/trip/chat", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter doChatWithReactAgent(@RequestParam String message,
                                            @RequestParam(required = false) String threadId,
-                                           @RequestParam(required = false) String requestId,
-                                           @RequestParam(required = false) String userId,
-                                           @RequestParam(required = false) String token,
-                                           @RequestParam(required = false) String clientId) {
+                                           @RequestParam(required = false) String requestId) {
         if (threadId == null || threadId.isEmpty()) {
             threadId = UUID.randomUUID().toString();
         }
         if (requestId == null || requestId.isEmpty()) {
             requestId = UUID.randomUUID().toString();
         }
-        // 记忆主体在控制层解析：身份线索的获取是 Web 层职责，服务层只消费结果
-        MemoryPrincipal principal = memorySubjectResolver.resolve(userId, token, clientId);
+        // 记忆主体在控制层解析：身份来自拦截器建立的登录态（ThreadLocal 只在同一线程可读），
+        // 服务层只消费解析结果。'/ai/**' 已要求登录，故这里必然拿到真实用户。
+        MemoryPrincipal principal = memorySubjectResolver.resolve();
         return tripAgentService.chatStream(message, threadId, requestId, principal);
     }
 

@@ -78,7 +78,7 @@ public class MemoryExtractionService {
      * 入参只需身份与会话——要抽取的"段"直接从会话库里取最近若干轮，
      * 不再依赖调用方逐轮透传 user/assistant 文本。
      *
-     * @param subjectKey     记忆主体键；为 null 时静默跳过（未登录且无 clientId）
+     * @param subjectKey     记忆主体键；为 null 时静默跳过（无登录态，正常链路下不会发生）
      * @param conversationId 会话 id，用于取该段记录与冲突校验的作用域
      */
     public void extractAsync(String subjectKey, String conversationId) {

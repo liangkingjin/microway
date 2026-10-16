@@ -25,8 +25,8 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        //1.获取请求头中的token
-        String token = request.getHeader("authorization");
+        //1.获取token：优先请求头，其次查询参数（SSE 专用，见 resolveToken 说明）
+        String token = resolveToken(request);
         if(StrUtil.isBlank(token)){
             return true;
         }
@@ -45,6 +45,19 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         stringRedisTemplate.expire(key, RedisConstants.LOGIN_USER_TTL, TimeUnit.SECONDS);
         //7.放行
         return true;
+    }
+
+    /**
+     * 取登录令牌：优先 {@code authorization} 请求头，为空再退到查询参数 {@code token}。
+     * <p>
+     * 查询参数这一路<b>只为 SSE 服务</b>：浏览器原生 {@code EventSource} 无法设置任何请求头，
+     * 而 AI 流式对话正是建立在它之上。这不是"身份降级"——两种通道拿到的是同一个 token，
+     * 后续 Redis 校验、UserDTO 还原、TTL 刷新完全一致，没有任何分支差异。
+     * 真正决定"是否登录"的是 {@link LoginInterceptor}，与本方法无关。
+     */
+    private String resolveToken(HttpServletRequest request) {
+        String header = request.getHeader("authorization");
+        return StrUtil.isNotBlank(header) ? header : request.getParameter("token");
     }
 
     @Override

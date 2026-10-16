@@ -1,31 +1,23 @@
 package com.wtlx.infrastructure.memory.support;
 
-import cn.hutool.core.bean.BeanUtil;
 import com.wtlx.domain.entity.dto.UserDTO;
-import com.wtlx.utils.RedisConstants;
 import com.wtlx.utils.UserHolder;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
-
-import java.util.Map;
 
 /**
- * 记忆主体解析器：把一次请求里的身份线索统一解析为长期记忆的作用域键。
+ * 记忆主体解析器：把当前登录用户转换为长期记忆的作用域键。
  * <p>
- * <b>为什么需要它</b>：{@code /ai/**} 是免登录路径（EventSource 无法携带 authorization 请求头，
- * 所以 AI 链路整体排除了登录拦截器），这意味着在对话链路里拿不到 {@code UserHolder}。
- * 但长期记忆必须锚定到人，否则跨会话复用无从谈起。因此身份来源按可靠性依次降级：
- * <ol>
- *     <li>{@code userId} 参数 —— 显式指定，管理接口与联调使用；</li>
- *     <li>{@code token} 参数 —— 前端用查询参数透传 token，服务端回查 Redis 登录态拿 userId
- *         （与 {@code RefreshTokenInterceptor} 同源，键 {@code login:token:<token>}）；</li>
- *     <li>{@code clientId} 参数 —— 前端 localStorage 持久化的设备 id，覆盖未登录游客，
- *         保证游客的偏好也能跨会话复用；</li>
- *     <li>全部缺失 —— 返回 {@link MemoryPrincipal#NONE}，本轮只走会话内短期记忆。</li>
- * </ol>
+ * <b>唯一来源</b>：{@code UserHolder} 中的登录用户 id。它由 {@code RefreshTokenInterceptor}
+ * 在请求入口建立，由 {@code LoginInterceptor} 保证非空——{@code /ai/**} 已纳入登录拦截，
+ * 能执行到这里说明请求必然已登录。
+ * <p>
+ * <b>为什么不再接受 token / clientId 之类的身份线索</b>：多一条线索就多一种"这段请求到底
+ * 属于谁"的解释。曾经的后备路径留着两条坑：显式 {@code userId} 参数是直接读写他人记忆的
+ * 越权通道；{@code clientId} 会让 token 临时失效的登录用户被静默判成游客，把偏好写进
+ * 另一份互不相通的画像里。身份收敛到一处后，主体只有 {@code user:<userId>} 一种形态，
+ * 既没有匿名分支，也不存在"这个请求可能没这个人"的歧义。
  *
  * @author 金小梁
  */
@@ -34,79 +26,24 @@ import java.util.Map;
 public class MemorySubjectResolver {
 
     @Resource
-    private StringRedisTemplate stringRedisTemplate;
-
-    @Resource
     private MemoryNormalizer memoryNormalizer;
 
     /**
-     * 解析本次请求的记忆主体
+     * 解析当前登录用户的记忆主体。
+     * <p>
+     * 必须在请求线程上调用：{@code UserHolder} 是 ThreadLocal，异步线程读不到。
+     * 因此调用点固定在 Controller，解析后的主体键经 {@code RunnableConfig} 元数据往下游传递。
      *
-     * @param userId   显式用户 id（可选）
-     * @param token    登录 token（可选，查询参数透传）
-     * @param clientId 匿名客户端 id（可选）
-     * @return 记忆主体；无法确定时返回 {@link MemoryPrincipal#NONE}
+     * @return 记忆主体；无登录态时返回 {@link MemoryPrincipal#NONE}
      */
-    public MemoryPrincipal resolve(String userId, String token, String clientId) {
-        // 1. 显式 userId 优先级最高
-        if (StringUtils.hasText(userId)) {
-            return buildUser(userId.trim());
+    public MemoryPrincipal resolve() {
+        UserDTO user = UserHolder.getUser();
+        if (user == null || user.getId() == null) {
+            log.warn("未取到登录用户，长期记忆主体缺失：本轮不读写长期记忆");
+            return MemoryPrincipal.NONE;
         }
-
-        // 2. token → Redis 登录态
-        if (StringUtils.hasText(token)) {
-            Long resolved = resolveUserIdByToken(token.trim());
-            if (resolved != null) {
-                return buildUser(String.valueOf(resolved));
-            }
-        }
-
-        // 3. 兜底：本线程若已由拦截器写入登录态（例如将来 AI 路径恢复鉴权），直接复用
-        UserDTO current = UserHolder.getUser();
-        if (current != null && current.getId() != null) {
-            return buildUser(String.valueOf(current.getId()));
-        }
-
-        // 4. 游客主体
-        if (StringUtils.hasText(clientId)) {
-            String key = memoryNormalizer.sanitizeSubjectKey(
-                    MemoryConstants.SUBJECT_GUEST_PREFIX + clientId.trim());
-            if (key != null) {
-                return new MemoryPrincipal(key, false);
-            }
-        }
-
-        return MemoryPrincipal.NONE;
-    }
-
-    /**
-     * 依据 token 回查 Redis 登录态取用户 id
-     *
-     * @param token 登录 token
-     * @return 用户 id；登录态不存在或已过期时返回 null
-     */
-    private Long resolveUserIdByToken(String token) {
-        try {
-            Map<Object, Object> userMap = stringRedisTemplate.opsForHash()
-                    .entries(RedisConstants.LOGIN_USER_KEY + token);
-            if (userMap.isEmpty()) {
-                return null;
-            }
-            UserDTO userDTO = BeanUtil.fillBeanWithMap(userMap, new UserDTO(), false);
-            return userDTO.getId();
-        } catch (Exception e) {
-            log.warn("token 解析用户失败，降级为游客记忆主体: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * 组装登录用户主体。userId 不要求是数字——外部系统主键同样能作为主体键使用，
-     * 因为长期记忆的唯一作用域边界是 {@code subjectKey} 字符串本身。
-     */
-    private MemoryPrincipal buildUser(String userId) {
         String subjectKey = memoryNormalizer.sanitizeSubjectKey(
-                MemoryConstants.SUBJECT_USER_PREFIX + userId);
-        return subjectKey == null ? MemoryPrincipal.NONE : new MemoryPrincipal(subjectKey, true);
+                MemoryConstants.SUBJECT_USER_PREFIX + user.getId());
+        return subjectKey == null ? MemoryPrincipal.NONE : new MemoryPrincipal(subjectKey);
     }
 }
