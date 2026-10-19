@@ -54,6 +54,11 @@ public class MemoryLlmAgent {
      */
     private static final int HARD_CANDIDATE_LIMIT = 20;
 
+    /**
+     * 单条记忆内容长度上限：模型偶发吐长文本会撑爆注入预算并拖长向量化，硬截断兜底
+     */
+    private static final int MAX_CONTENT_LEN = 200;
+
     @Resource
     @Qualifier("openAiChatModel")
     private ChatModel chatModel;
@@ -227,10 +232,14 @@ public class MemoryLlmAgent {
         if (!StringUtils.hasText(content) || content.trim().length() < 4) {
             return null;
         }
+        content = content.trim();
+        if (content.length() > MAX_CONTENT_LEN) {
+            content = content.substring(0, MAX_CONTENT_LEN);
+        }
         MemoryCandidate candidate = new MemoryCandidate();
         candidate.setType(MemoryType.fromCode(JsonTexts.text(node, "type")));
         candidate.setKey(JsonTexts.text(node, "key"));
-        candidate.setContent(content.trim());
+        candidate.setContent(content);
         candidate.setEvidence(JsonTexts.text(node, "evidence"));
 
         JsonNode structuredNode = node.get("structured");
@@ -265,11 +274,14 @@ public class MemoryLlmAgent {
         sb.append("\n【已有记忆】\n");
         for (int i = 0; i < existing.size(); i++) {
             var memory = existing.get(i).memory();
+            // 同槽位记忆分数为 0（非向量召回），标成"同槽位命中"而不是误报相似度 0.00
+            double score = existing.get(i).pathScore();
+            String simText = score > 0 ? "相似度 " + String.format("%.2f", score) : "同槽位命中";
             sb.append(i + 1).append(". [").append(memory.getMemoryType()).append("] ")
                     .append("槽位=").append(memory.getMemoryKey())
                     .append("，内容=").append(memory.getContent())
                     .append("（置信 ").append(String.format("%.2f", memory.getConfidence()))
-                    .append("，相似度 ").append(String.format("%.2f", existing.get(i).pathScore()))
+                    .append("，").append(simText)
                     .append("）\n");
         }
         return sb.toString();

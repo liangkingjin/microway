@@ -1,5 +1,7 @@
 package com.wtlx.infrastructure.memory.extraction;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.wtlx.domain.entity.conversation.ConversationMessage;
 import com.wtlx.domain.entity.memory.MemoryCandidate;
 import com.wtlx.infrastructure.memory.MemoryLlmAgent;
@@ -14,8 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -47,9 +49,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MemoryExtractionService {
 
     /**
-     * 每个会话累计的"未触发轮数"；达到阈值即触发一段抽取，然后清零
+     * 每个会话累计的"未触发轮数"；达到阈值即触发一段抽取，然后清零。
+     * <p>
+     * shortcut: 用 Guava cache 的惰性过期兜住内存（会话长期不活跃即被回收），不做定时清理；
+     * 若需要严格容量上限再换 Caffeine/自带 maximumSize。
      */
-    private final ConcurrentHashMap<String, AtomicInteger> pendingRounds = new ConcurrentHashMap<>();
+    private final Cache<String, AtomicInteger> pendingRounds = CacheBuilder.newBuilder()
+            .expireAfterAccess(2, TimeUnit.HOURS)
+            .build();
 
     @Resource
     private MemoryProperties memoryProperties;
@@ -88,29 +95,17 @@ public class MemoryExtractionService {
         if (!memoryProperties.isEnabled() || !memoryProperties.isExtractionEnabled()) {
             return;
         }
-        AtomicInteger counter = pendingRounds.computeIfAbsent(conversationId, k -> new AtomicInteger(0));
+        AtomicInteger counter = pendingRounds.asMap().computeIfAbsent(conversationId, k -> new AtomicInteger(0));
         if (counter.incrementAndGet() < memoryProperties.getExtractionEveryRounds()) {
             return; // 未累计满阈值，本轮不抽
         }
-        counter.set(0); // 触发后立即清零，准备下一段
+        pendingRounds.invalidate(conversationId); // 触发后清掉计数，准备下一段
         try {
             memoryExtractionExecutor.execute(() -> extractSegmentNow(subjectKey, conversationId));
         } catch (Exception e) {
             // 线程池拒绝（极端情况）：不能影响对话收尾
             log.warn("记忆段抽取任务提交失败，本段不抽取: {}", e.getMessage());
         }
-    }
-
-    /**
-     * 手动触发（管理接口 / 调试 / 补偿）：同步抽取当前会话最近一段，阻塞调用线程
-     *
-     * @return 实际落库（非 NOOP）的记忆条数
-     */
-    public int extractNow(String subjectKey, String conversationId) {
-        if (!StringUtils.hasText(subjectKey) || !StringUtils.hasText(conversationId)) {
-            return 0;
-        }
-        return extractSegmentNow(subjectKey, conversationId);
     }
 
     /**

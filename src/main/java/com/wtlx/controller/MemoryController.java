@@ -6,7 +6,6 @@ import com.wtlx.domain.entity.dto.Result;
 import com.wtlx.domain.entity.memory.MemoryHit;
 import com.wtlx.domain.entity.memory.MemoryOverviewVO;
 import com.wtlx.domain.entity.memory.UserMemory;
-import com.wtlx.infrastructure.memory.extraction.MemoryExtractionService;
 import com.wtlx.infrastructure.memory.retrieval.MemoryRetrievalService;
 import com.wtlx.infrastructure.memory.schema.MemorySchemaInitializer;
 import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
@@ -64,9 +63,6 @@ public class MemoryController {
 
     @Resource
     private MemoryRetrievalService memoryRetrievalService;
-
-    @Resource
-    private MemoryExtractionService memoryExtractionService;
 
     @Resource
     private MemorySchemaInitializer memorySchemaInitializer;
@@ -134,14 +130,6 @@ public class MemoryController {
         payload.put("hitCount", hits.size());
         payload.put("hits", hits);
         return Result.ok(payload);
-    }
-
-    @ApiOperation("手动触发记忆抽取（调试与补偿）")
-    @PostMapping("/extract")
-    public Result extract(@RequestParam String conversationId) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
-        int applied = memoryExtractionService.extractNow(principal.subjectKey(), conversationId);
-        return Result.ok("抽取完成，落库 " + applied + " 条记忆");
     }
 
     @ApiOperation("删除单条记忆（软删）")

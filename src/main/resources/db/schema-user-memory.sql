@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS user_memory_extraction (
     id              BIGSERIAL PRIMARY KEY,
     subject_key     VARCHAR(80) NOT NULL,
     conversation_id VARCHAR(64) NOT NULL,
-    -- 轮次指纹：sha256(conversationId|userMessage)
+    -- 段指纹：conversationId + 段内消息 id 序列的哈希
     turn_hash       VARCHAR(64) NOT NULL,
     candidate_count INTEGER     NOT NULL DEFAULT 0,
     applied_count   INTEGER     NOT NULL DEFAULT 0,

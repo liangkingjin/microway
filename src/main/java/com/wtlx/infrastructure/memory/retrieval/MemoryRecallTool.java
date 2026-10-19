@@ -1,7 +1,6 @@
 package com.wtlx.infrastructure.memory.retrieval;
 
 import com.alibaba.cloud.ai.graph.agent.tools.ToolContextHelper;
-import com.wtlx.domain.entity.memory.MemoryHit;
 import com.wtlx.infrastructure.memory.context.MemoryContextBuilder;
 import com.wtlx.infrastructure.memory.support.MemoryConstants;
 import jakarta.annotation.Resource;
@@ -11,8 +10,6 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-
-import java.util.List;
 
 /**
  * 用户长期记忆召回工具（模型可主动调用）。
@@ -41,9 +38,6 @@ public class MemoryRecallTool {
     private static final int RECALL_TOP_N = 6;
 
     @Resource
-    private MemoryRetrievalService memoryRetrievalService;
-
-    @Resource
     private MemoryContextBuilder memoryContextBuilder;
 
     /**
@@ -68,14 +62,13 @@ public class MemoryRecallTool {
             return "请给出需要确认的信息维度后再检索。";
         }
 
-        List<MemoryHit> hits = memoryRetrievalService.retrieve(subjectKey, query, RECALL_TOP_N);
-        if (hits.isEmpty()) {
+        MemoryContextBuilder.MemoryPrompt prompt = memoryContextBuilder.build(subjectKey, query, RECALL_TOP_N);
+        if (prompt.isEmpty()) {
             log.info("长期记忆召回为空, subject: {}, query: {}", subjectKey, query);
             return "系统中暂未沉淀该用户的长期记忆（查询：" + query + "）。";
         }
-        String text = memoryContextBuilder.render(hits);
-        log.info("长期记忆召回成功, subject: {}, query: {}, 命中 {} 条", subjectKey, query, hits.size());
-        return text == null ? "系统中暂未沉淀该用户的长期记忆。" : text;
+        log.info("长期记忆召回成功, subject: {}, query: {}, 命中 {} 条", subjectKey, query, prompt.hits().size());
+        return prompt.text();
     }
 
     /**

@@ -111,7 +111,7 @@ public class UserMemory {
     private int version;
 
     /**
-     * 被检索命中次数，体现复用强度，也是清理时判断"是否还有人用得上"的依据
+     * 被检索命中次数：保留列，当前链路不写入（清理策略未启用命中统计）
      */
     private int hitCount;
 

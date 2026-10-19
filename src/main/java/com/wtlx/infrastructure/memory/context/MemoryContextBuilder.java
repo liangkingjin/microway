@@ -63,14 +63,22 @@ public class MemoryContextBuilder {
     }
 
     /**
+     * 检索并渲染长期记忆（默认条数）
+     */
+    public MemoryPrompt build(String subjectKey, String query) {
+        return build(subjectKey, query, memoryProperties.getRetrievalTopN());
+    }
+
+    /**
      * 检索并渲染长期记忆
      *
      * @param subjectKey 记忆主体键
      * @param query      本轮用户查询（作为检索输入）
+     * @param topN       最多检索条数
      * @return 渲染结果；无主体、开关关闭或无命中时返回空结果
      */
-    public MemoryPrompt build(String subjectKey, String query) {
-        List<MemoryHit> hits = memoryRetrievalService.retrieve(subjectKey, query);
+    public MemoryPrompt build(String subjectKey, String query, int topN) {
+        List<MemoryHit> hits = memoryRetrievalService.retrieve(subjectKey, query, topN);
         if (hits.isEmpty()) {
             return MemoryPrompt.empty();
         }
@@ -114,20 +122,25 @@ public class MemoryContextBuilder {
         int stableLimit = Math.min(stable.size(), memoryProperties.getStableMaxItems());
         int ephemeralLimit = Math.min(ephemeral.size(), memoryProperties.getEphemeralMaxItems());
 
+        // 小标题长度也计入预算，否则总长会超出 context-max-chars
+        String stableHeader = "■ 长期偏好\n";
+        String ephemeralHeader = "■ 时效信息\n";
+
         StringBuilder stableBlock = new StringBuilder();
-        int stableUsed = appendLines(stableBlock, stable.subList(0, stableLimit), used, budget);
+        int stableUsed = appendLines(stableBlock, stable.subList(0, stableLimit), used + stableHeader.length(), budget);
         if (stableUsed > 0) {
-            sb.append("■ 长期偏好\n").append(stableBlock);
-            used += stableUsed + "■ 长期偏好\n".length();
+            sb.append(stableHeader).append(stableBlock);
+            used += stableUsed + stableHeader.length();
         }
 
         int ephemeralUsed = 0;
         if (ephemeralLimit > 0) {
             StringBuilder ephemeralBlock = new StringBuilder();
-            ephemeralUsed = appendLines(ephemeralBlock, ephemeral.subList(0, ephemeralLimit), used, budget);
+            ephemeralUsed = appendLines(ephemeralBlock, ephemeral.subList(0, ephemeralLimit),
+                    used + ephemeralHeader.length(), budget);
             if (ephemeralUsed > 0) {
-                sb.append("■ 时效信息\n").append(ephemeralBlock);
-                used += ephemeralUsed + "■ 时效信息\n".length();
+                sb.append(ephemeralHeader).append(ephemeralBlock);
+                used += ephemeralUsed + ephemeralHeader.length();
             }
         }
 
@@ -156,8 +169,8 @@ public class MemoryContextBuilder {
         for (MemoryHit hit : hits) {
             String line = formatLine(hit);
             if (used + written + line.length() > budget) {
-                // 预算用尽即停：宁可少注入一条，也不能让记忆把上下文挤爆
-                break;
+                // 单条超预算就跳过它，继续试后面更短的：否则一条超长记忆会饿死整段
+                continue;
             }
             sb.append(line);
             written += line.length();

@@ -162,16 +162,18 @@ public class MemoryMergeService {
         String key = memoryNormalizer.normalizeKey(candidate.getKey());
         String content = candidate.getContent().trim();
         String dedupKey = memoryNormalizer.dedupKey(candidate.getType(), key, content);
-        String contentHash = memoryNormalizer.contentHash(content);
-        String literal = memoryEmbeddingService.embedToLiteral(content);
 
-        // 2. 指纹级去重：完全相同的槽位 + 取值 → 只巩固
+        // 2. 指纹级去重：完全相同的槽位 + 取值 → 只巩固。
+        // 纯字符串比较，先于向量化执行，避免给注定 NOOP 的重复候选白付一次 embedding
         UserMemory exact = userMemoryMapper.findActiveByDedupKey(subjectKey, dedupKey);
         if (exact != null) {
             userMemoryMapper.confirm(exact.getId(), candidate.getConfidence(), candidate.getEvidence());
             record(counts, MemoryDecision.NOOP);
             return;
         }
+
+        String contentHash = memoryNormalizer.contentHash(content);
+        String literal = memoryEmbeddingService.embedToLiteral(content);
 
         // 3. 收集相关记忆：同槽位（语义冲突与相似度无关）+ 向量近邻
         List<UserMemory> sameSlot = userMemoryMapper.findActiveByKey(subjectKey, key, 3);
@@ -274,10 +276,18 @@ public class MemoryMergeService {
                 UserMemory target = decision.target();
                 int nextVersion = target.getVersion() + 1;
                 String structured = candidate.getStructured() != null ? candidate.getStructured() : target.getStructured();
-                userMemoryMapper.updateContent(target.getId(), decision.content(), structured,
+                // 内容可能被模型合并改写，向量 / 去重键要按最终内容重算，否则这条记忆检索不回来也去不了重
+                String finalContent = decision.content();
+                String finalLiteral = finalContent.equals(content)
+                        ? literal
+                        : memoryEmbeddingService.embedToLiteral(finalContent);
+                userMemoryMapper.updateContent(target.getId(), finalContent, structured,
                         Math.max(target.getConfidence(), candidate.getConfidence()),
                         Math.max(target.getImportance(), candidate.getImportance()),
-                        nextVersion, candidate.getEvidence());
+                        nextVersion, candidate.getEvidence(),
+                        memoryNormalizer.contentHash(finalContent),
+                        memoryNormalizer.dedupKey(candidate.getType(), key, finalContent),
+                        finalLiteral);
             }
 
             case SUPERSEDE -> {

@@ -26,6 +26,8 @@ public class MemoryExtractionMapper {
     /**
      * 记录一段会话记录的抽取结果（候选数 / 实际落库数），仅用于观测抽取质量。
      * 同一段指纹已存在时忽略，避免重试重复记行。
+     *
+     * @param segmentHash 段指纹：conversationId + 段内消息 id 序列的哈希
      */
     public void recordSegment(String subjectKey, String conversationId, String segmentHash,
                              int candidateCount, int appliedCount) {

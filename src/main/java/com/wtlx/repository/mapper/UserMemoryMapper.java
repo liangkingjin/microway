@@ -118,17 +118,24 @@ public class UserMemoryMapper {
     }
 
     /**
-     * 就地更新记忆内容（决策 UPDATE）：丰富表述、补结构化槽位、提升置信度，不产生新行
+     * 就地更新记忆内容（决策 UPDATE）：丰富表述、补结构化槽位、提升置信度，不产生新行。
+     * <p>
+     * 内容变了，向量与去重键必须一起重算，否则这条记忆再也检索不回来、也去不了重
+     * （详情见 {@code MemoryMergeService} 的 UPDATE 分支）。embedding 传 null 时保留旧向量
+     * （向量化失败不该抹掉已有向量）。
      */
     public int updateContent(long id, String content, String structured, double confidence,
-                             double importance, int version, String evidence) {
+                             double importance, int version, String evidence,
+                             String contentHash, String dedupKey, String embeddingLiteral) {
         String sql = """
                 UPDATE user_memory
                    SET content = ?, structured = CAST(? AS jsonb), confidence = ?::real, importance = ?::real,
-                       version = ?, evidence = ?, updated_at = CURRENT_TIMESTAMP
+                       version = ?, evidence = ?, content_hash = ?, dedup_key = ?,
+                       embedding = COALESCE(CAST(? AS vector), embedding), updated_at = CURRENT_TIMESTAMP
                  WHERE id = ?
                 """;
-        return jdbcTemplate.update(sql, content, structured, confidence, importance, version, evidence, id);
+        return jdbcTemplate.update(sql, content, structured, confidence, importance, version, evidence,
+                contentHash, dedupKey, embeddingLiteral, id);
     }
 
     /**

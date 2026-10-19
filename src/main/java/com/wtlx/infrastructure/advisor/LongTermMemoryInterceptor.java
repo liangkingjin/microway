@@ -32,7 +32,7 @@ import java.util.Map;
  * 混在一个类里会让两条完全不同的链路互相纠缠。
  * <p>
  * 拦截器在模型调用前按顺序执行，两者都重写系统提示、且都读取"当前"的 systemMessage，
- * 因此可以安全串联：最终系统提示 = 长期记忆 + 对话摘要 + 原始系统提示词。
+ * 因此可以安全串联：最终系统提示 = 原始系统提示词 + 对话摘要 + 长期记忆。
  * <p>
  * <b>失败降级</b>：任何异常都只记日志并原样调用下游。长期记忆是增强能力，
  * 它失效时用户应该"觉得不够个性化"，而不是"对话报错"。
@@ -72,7 +72,9 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
 
             SystemMessage originalSystem = request.getSystemMessage();
             String originalText = originalSystem == null ? "" : originalSystem.getText();
-            String enhancedSystem = memoryPrompt.text() + "\n" + originalText;
+            // 记忆排在原始系统指令之后：记忆源自用户对话，属半可信内容，
+            // 不能压在真正的系统指令前面（否则等于给持久提示注入留通道）
+            String enhancedSystem = originalText + "\n" + memoryPrompt.text();
 
             ModelRequest enhancedRequest = ModelRequest.builder()
                     .systemMessage(new SystemMessage(enhancedSystem))
