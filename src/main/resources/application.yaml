@@ -116,6 +116,45 @@ trip-agent:
     # 启动时是否对缺失索引的来源做全量回填（量大时建议关闭，改由管理接口触发）
     rebuild-on-startup: false
 
+  # ==================== 用户长期记忆（跨会话） ====================
+  # 短期记忆（摘要 + 最近轮次）的保留轮数 / 阈值是常量，写在
+  # ConversationMemoryServiceImpl 与 SummaryCompressorImpl 里；
+  # 这里是长期记忆（user_memory 表 + pgvector）的全部可调参数。
+  #
+  # 注意：相似度类阈值按 DashScope text-embedding-v3（1024 维）实测标定，
+  # 换 embedding 模型或换抽取模型必须重新标定，否则会出现
+  # "该合并的没合并（冗余累积）"或"不该合并的被覆盖（偏好被误改）"。
+  memory:
+    enabled: true
+    # ---- 抽取（异步子 Agent，段级触发）----
+    extraction-enabled: true
+    # 每累计多少轮对话触发一次"该段会话记录"的提取（写入链路简化为"每 N 轮抽一段"）
+    extraction-every-rounds: 1
+    # 单次抽取覆盖的段大小（轮）：实际加载最近 2*N 条消息
+    segment-max-rounds: 10
+    # 候选低于该置信度直接丢弃
+    extraction-min-confidence: 0.35
+    # 单段候选数上限
+    extraction-max-candidates: 8
+    extraction-pool-size: 2
+    # ---- 合并与冲突校验 ----
+    # 相似度 ≥ 0.92 视为同一事实的不同表述（不新增）
+    duplicate-similarity: 0.92
+    # 相似度 < 0.60 视为无关（直接新增）；0.60~0.92 之间交冲突判定模型裁决
+    conflict-similarity: 0.60
+    conflict-judge-enabled: true
+    semantic-search-top-k: 5
+    # ---- 检索（单路向量）----
+    retrieval-top-n: 8
+    # 语义向量召回条数
+    vector-top-k: 12
+    vector-threshold: 0.45
+    # ---- 上下文注入 ----
+    # 注入模型的记忆文本字符上限（记忆是每轮固定开销，必须封顶）
+    context-max-chars: 900
+    stable-max-items: 8
+    ephemeral-max-items: 4
+
 # ==================== 接口文档 ====================
 springdoc:
   swagger-ui:

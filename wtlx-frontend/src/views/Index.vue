@@ -8,7 +8,6 @@
       </div>
       <div class="status-item" :class="{ active: activeTab === 'follow' }" @click="switchTab('follow')">关注</div>
       <div class="status-item" :class="{ active: activeTab === 'recommend' }" @click="switchTab('recommend')">推荐</div>
-      <div class="status-item" :class="{ active: activeTab === 'discover' }" @click="switchTab('discover')">发现</div>
       <div class="publish-button" @click="toPublishSelect">
         <el-icon><EditPen /></el-icon> 发布
       </div>
@@ -94,77 +93,22 @@
       </div>
     </div>
 
-    <!-- 发现页（视频流） -->
-    <div v-if="activeTab === 'discover'" class="discover-container">
-      <div class="video-container">
-        <div class="video-wrapper" @touchstart="touchStart" @touchend="touchEnd">
-          <!-- 只渲染当前及前后各一个视频：未渲染的 <video> 不会发起请求，避免一次性拉取全部视频。
-           v-if 必须放在 template 上，Vue3 不允许 v-if 与 v-for 同元素且 v-if 拿不到循环变量 -->
-          <template v-for="(video, index) in videos" :key="video.videoId">
-            <div class="video-item" v-if="Math.abs(index - currentIndex) <= 1" v-show="currentIndex === index">
-              <video
-                class="video-player"
-                :src="video.videoUrl"
-                :ref="videoRef(index)"
-                :title="video.description"
-                loop
-                muted
-                playsinline
-                preload="auto"
-                @click="togglePlay(index)"
-                @loadedmetadata="videoLoaded(index)"
-                @error="videoError(index)"
-              ></video>
-              <div class="video-overlay">
-                <div class="video-info">
-                  <div class="video-title">{{ video.authorName }}</div>
-                  <div class="video-desc">{{ video.description }}</div>
-                </div>
-              </div>
-              <div class="video-actions">
-                <div class="action-item">
-                  <div class="action-btn avatar" @click="goToOtherInfo(video.id)">
-                    <img :src="video.authorAvatar" :alt="video.authorName" :title="video.authorName">
-                  </div>
-                </div>
-                <div class="action-item">
-                  <div class="action-btn like-btn" @click="toggleLike(video)">
-                    <el-icon :style="{ color: video.isLiked ? '#ff2442' : '#fff' }"><Thumb /></el-icon>
-                  </div>
-                  <div class="action-count">{{ video.likesCount || 0 }}</div>
-                </div>
-                <div class="action-item">
-                  <div class="action-btn" @click="showComments(video)">
-                    <el-icon><ChatDotRound /></el-icon>
-                  </div>
-                  <div class="action-count">{{ video.commentsCount || 0 }}</div>
-                </div>
-              </div>
-            </div>
-          </template>
-          <div v-if="loading" class="loading-text">加载中...</div>
-        </div>
-      </div>
-    </div>
-
     <FootBar :active-btn="1" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElLoading } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import FootBar from '../components/FootBar.vue'
 import request from '../api/request'
-import { safeAutoPlay, toggleVideo, onVideoError } from '../utils/video'
 
 const router = useRouter()
 
 // 原 created() 中一次性加载
 onMounted(() => {
   queryTypes()
-  loadVideos()
   loadBlogsCursor()
   window.addEventListener('scroll', onWindowScroll)
 })
@@ -176,21 +120,8 @@ const blogLastId = ref(null)
 const blogHasMore = ref(true)
 const blogLoading = ref(false)
 const blogNoMore = ref(false)
-const loading = ref(false)
 const activeTab = ref('recommend')
-const videos = ref([])
-const currentIndex = ref(0)
-const startY = ref(0)
 const followedBlogs = ref([])
-
-// 视频 DOM 引用（Vue2 :ref="'video'+index" → Vue3 函数式 ref）
-const videoEls = reactive({})
-function videoRef(index) {
-  return (el) => {
-    if (el) videoEls[index] = el
-    else delete videoEls[index]
-  }
-}
 
 function toPublishSelect() {
   router.push('/publish-select')
@@ -200,111 +131,7 @@ function switchTab(tab) {
   activeTab.value = tab
   if (tab === 'follow') {
     loadFollowedBlogs()
-  } else if (tab === 'discover' && videos.value.length > 0) {
-    // 视频已挂载后自动播放当前视频
-    setTimeout(() => playVideo(currentIndex.value), 50)
-  } else {
-    pauseCurrentVideo()
   }
-}
-
-function loadVideos() {
-  request.get('/videos')
-    .then(res => {
-      const data = res.data
-      if (data) {
-        videos.value = data.map(video => ({
-          // 注意：VideosVO.id 返回的是发布者 userId，视频主键是 videoId，
-          // key 必须用 videoId，否则同一作者的多个视频 key 重复会导致渲染/ref 错乱
-          id: video.id,
-          videoId: video.videoId,
-          authorName: video.nickName,
-          authorAvatar: video.icon,
-          videoUrl: video.videoUrl,
-          description: video.description,
-          isLiked: video.isLiked,
-          likesCount: video.likeCount,
-          commentsCount: video.commentCount
-        }))
-      }
-    })
-    .catch(err => {
-      console.error('加载视频失败:', err)
-      ElMessage.error(typeof err === 'string' ? err : '加载视频失败')
-    })
-}
-
-function videoLoaded(index) {
-  if (activeTab.value === 'discover' && index === currentIndex.value) {
-    playVideo(index)
-  }
-}
-
-function videoError(index) {
-  console.error('视频加载失败:', videos.value[index] && videos.value[index].videoUrl)
-  onVideoError('视频加载失败，请检查视频地址或网络')
-}
-
-function playVideo(index) {
-  pauseAllVideos()
-  safeAutoPlay(videoEls[index])
-}
-
-function pauseAllVideos() {
-  videos.value.forEach((_, i) => {
-    const video = videoEls[i]
-    if (video) video.pause()
-  })
-}
-
-function pauseCurrentVideo() {
-  const video = videoEls[currentIndex.value]
-  if (video) {
-    video.pause()
-  }
-}
-
-function togglePlay(index) {
-  toggleVideo(videoEls[index])
-}
-
-function touchStart(e) {
-  startY.value = e.touches[0].clientY
-}
-
-function touchEnd(e) {
-  const endY = e.changedTouches[0].clientY
-  const diff = endY - startY.value
-  if (diff < -50 && currentIndex.value < videos.value.length - 1) {
-    currentIndex.value++
-    setTimeout(() => playVideo(currentIndex.value), 50)
-  } else if (diff > 50 && currentIndex.value > 0) {
-    currentIndex.value--
-    setTimeout(() => playVideo(currentIndex.value), 50)
-  }
-}
-
-function toggleLike(video) {
-  request.get(`/video-likes/${video.videoId}`)
-    .then(() => {
-      video.isLiked = !video.isLiked
-      video.likesCount = video.isLiked ? (video.likesCount || 0) + 1 : (video.likesCount || 1) - 1
-    })
-    .catch(err => {
-      console.error(err)
-      ElMessage.error('操作失败')
-    })
-}
-
-function showComments() {
-  ElMessage({
-    message: '评论功能开发中...',
-    type: 'info'
-  })
-}
-
-function goToOtherInfo(userId) {
-  router.push('/other-info?id=' + userId)
 }
 
 function queryTypes() {
@@ -317,31 +144,7 @@ function queryTypes() {
     })
 }
 
-function addLike(b) {
-  request.put('/blog/like/' + b.id)
-    .then(() => {
-      queryBlogById(b)
-    })
-    .catch(err => {
-      ElMessage.error(err)
-    })
-}
-
-function queryBlogById(b) {
-  request.get('/blog/' + b.id)
-    .then(res => {
-      const data = res.data
-      b.liked = data.liked
-      b.isLike = data.isLike
-    })
-    .catch(() => {
-      console.error
-      b.liked++
-    })
-}
-
-function toShopList(id, name) {
-  if (id === 4) router.push('/ai')
+function toShopList(id, name) {  if (id === 4) router.push('/ai')
   else if (id === 7) router.push('/group-tour')
   else if (id === 5) router.push('/local-tour')
   else if (id === 6) router.push('/jingdian')
@@ -354,10 +157,6 @@ function toShopList(id, name) {
 
 function toBlogDetail(b) {
   router.push('/blog-detail?id=' + b.id)
-}
-
-function toBlogEdit() {
-  router.push('/blog-edit')
 }
 
 function toMore(type) {
@@ -451,7 +250,6 @@ function formatTime(timestamp) {
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onWindowScroll)
-  pauseAllVideos()
 })
 </script>
 
@@ -792,109 +590,6 @@ onBeforeUnmount(() => {
 .comment-count i {
   margin-right: 4px;
   font-size: 14px;
-}
-.discover-container {
-  position: fixed;
-  top: 50px;
-  left: 0;
-  right: 0;
-  bottom: 60px;
-  background: #000;
-  z-index: 100;
-}
-.video-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-.video-wrapper {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-.video-item {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-.video-player {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.video-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 15px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.7));
-  color: #fff;
-}
-.video-title {
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 8px;
-}
-.video-desc {
-  font-size: 14px;
-  opacity: 0.9;
-}
-.video-actions {
-  position: absolute;
-  right: 15px;
-  bottom: 80px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  align-items: center;
-}
-.action-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #fff;
-}
-.action-btn {
-  width: 45px;
-  height: 45px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.action-btn.avatar {
-  border: 2px solid #fff;
-  border-radius: 50%;
-  overflow: hidden;
-}
-.action-btn.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.action-btn i {
-  font-size: 28px;
-  color: #fff;
-  text-shadow: 0 1px 1px rgba(0,0,0,0.2);
-}
-.action-count {
-  font-size: 12px;
-  margin-top: 3px;
-  color: #fff;
-}
-.loading-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #fff;
-  z-index: 2;
 }
 :deep(.el-carousel__arrow) {
   background: rgba(255,255,255,0.8)!important;

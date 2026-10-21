@@ -1,9 +1,14 @@
 -- ============================================================
 -- TripAgent PostgreSQL 统一建表脚本（数据库：vector_db）
 --
--- 统一存储：
+-- 本文件负责：
 --   1. pgvector 向量表（vector_store）
---   2. ReactAgent 对话消息 / 摘要（conversation_message / conversation_summary）
+--   2. ReactAgent 对话消息 / 摘要（conversation_message / conversation_summary）—— 会话内短期记忆
+--
+-- 用户长期记忆（user_memory / user_memory_extraction）不在此文件：
+--   它的 DDL 是单一来源 db/schema-user-memory.sql，启动期由 MemorySchemaInitializer
+--   读取执行，本文件不再抄一份 —— 两份副本必然漂移。
+--   手工初始化时按顺序执行本文件 + db/schema-user-memory.sql 即可。
 --
 -- 全部语句幂等（IF NOT EXISTS），可重复执行。
 -- 应用侧 PGVector starter（initialize-schema=true）也会执行同样的幂等 DDL，互不冲突。
@@ -49,3 +54,5 @@ CREATE TABLE IF NOT EXISTS conversation_summary (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 4~6. 用户长期记忆相关表见同目录下的 schema-user-memory.sql

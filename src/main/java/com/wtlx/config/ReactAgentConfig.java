@@ -4,6 +4,7 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.modelcalllimit.ModelCallLimitHook;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.wtlx.infrastructure.advisor.ConversationMemoryInterceptor;
+import com.wtlx.infrastructure.advisor.LongTermMemoryInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
@@ -15,7 +16,7 @@ import org.springframework.core.io.Resource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
+import java.util.List;
 
 /**
  * ReactAgent 配置类
@@ -33,14 +34,16 @@ public class ReactAgentConfig {
      *
      * @param chatModel         对话模型（OpenAI 协议接入的阿里云百炼兼容模式端点）
      * @param allTools          所有工具（本地 + MCP）
-     * @param memoryInterceptor 对话记忆拦截器（Spring Bean，内部通过 @Resource 注入记忆服务）
+     * @param memoryInterceptor 会话内短期记忆拦截器（摘要 + 最近若干轮）
+     * @param longTermInterceptor 跨会话长期记忆拦截器（用户画像，多路检索 + RRF 融合后注入）
      * @return ReactAgent 实例
      */
     @Bean
     public ReactAgent tripReactAgent(
             @Qualifier("openAiChatModel") ChatModel chatModel,
             ToolCallback[] allTools,
-            ConversationMemoryInterceptor memoryInterceptor) {
+            ConversationMemoryInterceptor memoryInterceptor,
+            LongTermMemoryInterceptor longTermInterceptor) {
 
         // 加载系统提示词
         String instruction = loadSystemPrompt();
@@ -53,7 +56,10 @@ public class ReactAgentConfig {
                 .tools(allTools)
                 .instruction(instruction)
                 .saver(new MemorySaver())
-                .interceptors(Collections.singletonList(memoryInterceptor))
+                // 拦截器按顺序串联，两者都重写系统提示且都读取"当前"的 systemMessage，
+                // 因此最终系统提示 = 长期记忆 + 对话摘要 + 原始提示词；短期记忆在前是为了
+                // 让"最近在聊什么"离原始系统提示更近，长期记忆作为背景信息在最外层
+                .interceptors(List.of(memoryInterceptor, longTermInterceptor))
                 .hooks(ModelCallLimitHook.builder().runLimit(20).build())
                 .build();
     }
