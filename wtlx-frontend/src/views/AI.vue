@@ -271,14 +271,14 @@ function loadSessions() {
   } catch (e) {
     list = []
   }
-  sessions.value = list
+  sessions.value = list.map(s => sanitizeSessionTitle(s))
 
   // 兼容旧版单会话记录（ai_chat_id）迁移到会话列表
   const legacyChatId = localStorage.getItem('ai_chat_id')
   if (legacyChatId && !sessions.value.some(s => s.id === legacyChatId)) {
     sessions.value.unshift({
       id: legacyChatId,
-      title: getChatTitleFromId(legacyChatId),
+      title: '新会话',
       time: Date.now()
     })
     localStorage.removeItem('ai_chat_id')
@@ -301,12 +301,15 @@ function loadSessions() {
   currentChatTitle.value = session ? session.title : 'AI助手'
 }
 
-function getChatTitleFromId(id) {
-  if (!id) return '新会话'
-  if (id.length > 12) {
-    return id.substring(0, 8) + '...'
-  }
-  return id
+// 旧版本曾用会话 id 截前 8 位当标题（如 "f131384b..."），会暴露内部标识；
+// 此处把历史脏标题洗成「新会话」，真实标题由首次发送时的用户消息回填
+function sanitizeSessionTitle(session) {
+  const looksLikeId =
+    !session.title ||
+    session.title === session.id ||
+    /^[0-9a-f]{8}\.\.\.$/.test(session.title)
+  if (looksLikeId) session.title = '新会话'
+  return session
 }
 
 function saveSessions() {
@@ -317,7 +320,7 @@ function addSessionToLocal(id, title) {
   if (sessions.value.some(s => s.id === id)) return
   sessions.value.unshift({
     id: id,
-    title: title || getChatTitleFromId(id),
+    title: title || '新会话',
     time: Date.now()
   })
   saveSessions()
