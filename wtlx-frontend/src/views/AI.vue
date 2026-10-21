@@ -60,7 +60,7 @@
               class="message-item"
               :class="msg.isUser ? 'user-message-row' : 'ai-message-row'">
               <template v-if="!msg.isUser">
-                <div class="avatar ai-avatar">AI</div>
+                <div class="avatar ai-avatar"><img class="avatar-img" src="/imgs/types/人工智能机器人.png" alt="AI"></div>
                 <div class="message-body">
                   <ThinkingPanel :steps="msg.thinking || []" :streaming="!!msg.streaming" />
                   <!-- v-html 会覆盖所在元素的子节点，正文必须单独一层，卡片才能与它同处一个气泡 -->
@@ -79,13 +79,13 @@
                   <div class="bubble user-bubble">{{ msg.content }}</div>
                   <span class="timestamp user-timestamp">{{ formatTime(msg.time) }}</span>
                 </div>
-                <div class="avatar user-avatar">我</div>
+                <div class="avatar user-avatar"><img class="avatar-img" :src="userAvatar" alt="我"></div>
               </template>
             </div>
           </template>
 
           <div v-if="connectionStatus === 'connecting'" class="message-item ai-message-row">
-            <div class="avatar ai-avatar">AI</div>
+            <div class="avatar ai-avatar"><img class="avatar-img" src="/imgs/types/人工智能机器人.png" alt="AI"></div>
             <div class="message-body">
               <div class="bubble ai-bubble">
                 <span class="typing-indicator">
@@ -139,6 +139,8 @@ import { useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/ai'
+import { getMe } from '../api/user'
+import { DEFAULT_AVATAR } from '../constants'
 import ThinkingPanel from '../components/chat/ThinkingPanel.vue'
 import BlogCardGrid from '../components/chat/BlogCardGrid.vue'
 
@@ -179,6 +181,8 @@ let deltaRafId = null
 const sessions = ref([])
 const currentChatId = ref('')
 const currentChatTitle = ref('AI助手')
+// 当前登录用户头像：消息列表右侧展示，加载失败退回默认头像
+const userAvatar = ref(DEFAULT_AVATAR)
 const showSidebar = ref(false)
 // 滚动行为控制：是否贴近底部、用户是否主动上滑、是否显示回到底部按钮
 const isNearBottom = ref(true)
@@ -190,6 +194,7 @@ let ignoreNextScroll = false
 onMounted(() => {
   scrollToBottom(true)
   loadSessions()
+  loadUserAvatar()
 
   if (messagesRef.value) {
     messagesRef.value.addEventListener('scroll', onMessagesScroll)
@@ -263,8 +268,19 @@ function formatDate(timestamp) {
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-function loadSessions() {
-  // 后端未提供会话列表接口，会话列表在前端本地维护（localStorage）
+// 拉取当前登录用户头像；未登录或失败时保持默认头像（/ai/** 已要求登录，正常必有登录态）
+async function loadUserAvatar() {
+  try {
+    const res = await getMe()
+    if (res.data && res.data.icon) {
+      userAvatar.value = '' + res.data.icon
+    }
+  } catch (e) {
+    // 保持 DEFAULT_AVATAR，不打断会话页
+  }
+}
+
+function loadSessions() {  // 后端未提供会话列表接口，会话列表在前端本地维护（localStorage）
   let list = []
   try {
     list = JSON.parse(localStorage.getItem('ai_sessions') || '[]')
@@ -946,12 +962,17 @@ function toggleSidebar() {
   font-weight: 600;
 }
 .ai-avatar {
-  background: linear-gradient(135deg, #1a5f7a, #87ceeb);
-  color: #ffffff;
+  background: #ffffff;
 }
 .user-avatar {
-  background: linear-gradient(135deg, #1a5f7a, #2d7a99);
-  color: #ffffff;
+  background: #ffffff;
+}
+/* 头像图片：铺满圆形容器（AI 用机器人图标，用户用登录头像） */
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .message-body {
   display: flex;
