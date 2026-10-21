@@ -77,6 +77,20 @@ public class BlogController {
     }
 
     /**
+     * 游标分页查询博客（首页达人攻略无限滚动）
+     * @param lastId 上一页最后一条博客 id，首页传空
+     * @param pageSize 每页条数，默认 10
+     * @return {list, hasMore}
+     */
+    @GetMapping("/hot/cursor")
+    @ApiOperation("游标分页查询所有博客")
+    public Result queryHotBlogCursor(
+            @RequestParam(value = "lastId", required = false) Long lastId,
+            @RequestParam(value = "pageSize", defaultValue = "10") Integer pageSize) {
+        return blogService.queryHotBlogByCursor(lastId, pageSize);
+    }
+
+    /**
      * 查询个人攻略及博客
      * @param id
      * @return

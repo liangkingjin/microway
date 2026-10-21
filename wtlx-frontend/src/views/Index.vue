@@ -36,29 +36,6 @@
       <div class="section-header">
         <div class="section-title">
           <i class="section-icon"></i>
-          <span>热门推荐</span>
-        </div>
-        <div class="section-more" @click="toMore('top')">
-          查看更多
-          <el-icon><ArrowRight /></el-icon>
-        </div>
-      </div>
-
-      <div class="section-content">
-        <div class="top-list-container">
-          <div class="recommendation-card" v-for="(item, index) in recommendations.slice(0, 6)" :key="index" @click="goToDetail(item)">
-            <div class="top-tag">
-              <div class="top-number">TOP {{ padNumber(index + 1) }}</div>
-            </div>
-            <img :src="item.coverUrl" :alt="item.title" :title="item.title" class="card-image">
-            <div class="location-name">{{ item.title }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="section-header">
-        <div class="section-title">
-          <i class="section-icon"></i>
           <span>达人攻略</span>
         </div>
         <div class="section-more" @click="toMore('blog')">
@@ -69,7 +46,7 @@
 
       <div class="section-content">
         <div class="top-list-container">
-          <div class="recommendation-card" v-for="(blog, index) in blogs.slice(0, 6)" :key="blog.id" @click="toBlogDetail(blog)">
+          <div class="recommendation-card" v-for="blog in blogs" :key="blog.id" @click="toBlogDetail(blog)">
             <img :src="blog.img" :alt="blog.title" :title="blog.title" class="card-image">
             <div class="blog-info">
               <div class="blog-title">{{ blog.title }}</div>
@@ -79,6 +56,11 @@
               </div>
             </div>
           </div>
+        </div>
+        <!-- 加载/到底提示 -->
+        <div class="blog-load-status">
+          <span v-if="blogLoading">加载中...</span>
+          <span v-else-if="blogNoMore" class="no-more">— 到底啦，没有更多攻略了 —</span>
         </div>
       </div>
     </div>
@@ -182,16 +164,18 @@ const router = useRouter()
 // 原 created() 中一次性加载
 onMounted(() => {
   queryTypes()
-  loadRecommendations()
   loadVideos()
-  loadBlogs()
+  loadBlogsCursor()
+  window.addEventListener('scroll', onWindowScroll)
 })
 
-const isReachBottom = ref(false)
 const types = ref([])
 const blogs = ref([])
-const current = ref(1)
-const recommendations = ref([])
+// 达人攻略游标分页：lastId 为当前列表最后一条博客 id，空表示首页
+const blogLastId = ref(null)
+const blogHasMore = ref(true)
+const blogLoading = ref(false)
+const blogNoMore = ref(false)
 const loading = ref(false)
 const activeTab = ref('recommend')
 const videos = ref([])
@@ -323,66 +307,10 @@ function goToOtherInfo(userId) {
   router.push('/other-info?id=' + userId)
 }
 
-function padNumber(num) {
-  return num.toString().padStart(2, '0')
-}
-
-function formatNumber(num) {
-  if (num >= 10000) {
-    return (num / 10000).toFixed(1) + '万'
-  }
-  return num.toString()
-}
-
-function goToDetail(item) {
-  router.push('/top-detail?id=' + item.id)
-}
-
-function loadRecommendations() {
-  loading.value = true
-  const loadingInstance = ElLoading.service({
-    lock: true,
-    text: '加载中...',
-    background: 'rgba(255, 255, 255, 0.7)'
-  })
-  request.get('/place-recommendations')
-    .then(res => {
-      if (res.success) {
-        recommendations.value = res.data.map(item => ({
-          id: item.id,
-          title: item.title,
-          coverUrl: item.coverUrl || './imgs/default.png'
-        }))
-      } else {
-        ElMessage.error('加载失败')
-      }
-    })
-    .catch(error => {
-      console.error('加载推荐失败:', error)
-      ElMessage.error('网络错误，请稍后重试')
-    })
-    .finally(() => {
-      loading.value = false
-      loadingInstance.close()
-    })
-}
-
 function queryTypes() {
   request.get('/shop-type/list')
     .then(res => {
       types.value = res.data
-    })
-    .catch(err => {
-      ElMessage.error(err)
-    })
-}
-
-function queryHotBlogsScroll() {
-  request.get('/blog/hot?current=' + current.value)
-    .then(res => {
-      const data = res.data
-      data.forEach(b => b.img = b.images.split(',')[0])
-      blogs.value = blogs.value.concat(data)
     })
     .catch(err => {
       ElMessage.error(err)
@@ -410,19 +338,6 @@ function queryBlogById(b) {
       console.error
       b.liked++
     })
-}
-
-function onScroll(e) {
-  const scrollTop = e.target.scrollTop
-  const offsetHeight = e.target.offsetHeight
-  const scrollHeight = e.target.scrollHeight
-  if (scrollTop + offsetHeight > scrollHeight && !isReachBottom.value) {
-    isReachBottom.value = true
-    current.value++
-    queryHotBlogsScroll()
-  } else {
-    isReachBottom.value = false
-  }
 }
 
 function toShopList(id, name) {
@@ -453,18 +368,43 @@ function toMore(type) {
   }
 }
 
-function loadBlogs() {
-  request.get('/blog/hot?current=1')
+function loadBlogsCursor() {
+  if (blogLoading.value || !blogHasMore.value) return
+  blogLoading.value = true
+  request.get('/blog/hot/cursor', {
+    params: {
+      lastId: blogLastId.value,
+      pageSize: 10
+    }
+  })
     .then(res => {
-      blogs.value = res.data.map(blog => {
-        blog.img = blog.images.split(',')[0]
-        return blog
-      })
+      const data = res.data
+      data.list.forEach(b => b.img = b.images.split(',')[0])
+      blogs.value = blogs.value.concat(data.list)
+      blogHasMore.value = data.hasMore
+      if (data.list.length > 0) {
+        blogLastId.value = data.list[data.list.length - 1].id
+      }
+      if (!data.hasMore) blogNoMore.value = true
     })
     .catch(err => {
-      console.error('加载博客失败:', err)
-      ElMessage.error('加载博客失败')
+      console.error('加载攻略失败:', err)
+      ElMessage.error('加载攻略失败')
     })
+    .finally(() => {
+      blogLoading.value = false
+    })
+}
+
+// 窗口滚动触底：距底部不足 300px 时加载下一页
+function onWindowScroll() {
+  if (activeTab.value !== 'recommend') return
+  const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
+  const clientHeight = document.documentElement.clientHeight
+  const scrollHeight = document.documentElement.scrollHeight
+  if (scrollTop + clientHeight >= scrollHeight - 300) {
+    loadBlogsCursor()
+  }
 }
 
 function loadFollowedBlogs() {
@@ -510,6 +450,7 @@ function formatTime(timestamp) {
 }
 
 onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onWindowScroll)
   pauseAllVideos()
 })
 </script>
@@ -752,6 +693,12 @@ onBeforeUnmount(() => {
 .blog-author span {
   font-size: 12px;
   color: #666;
+}
+.blog-load-status {
+  text-align: center;
+  padding: 14px 0 60px;
+  font-size: 13px;
+  color: #999;
 }
 .follow-container {
   padding: 12px;
