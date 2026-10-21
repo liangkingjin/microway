@@ -15,7 +15,6 @@ import com.wtlx.domain.entity.dto.ai.TripAnswerVO;
 import com.wtlx.domain.entity.dto.ai.TripCardVO;
 import com.wtlx.infrastructure.memory.extraction.MemoryExtractionService;
 import com.wtlx.infrastructure.memory.support.MemoryConstants;
-import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
 import com.wtlx.infrastructure.rag.generation.CardSink;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
@@ -111,12 +110,11 @@ public class TripAgentServiceImpl implements TripAgentService {
             });
 
     @Override
-    public SseEmitter chatStream(String message, String threadId, String requestId, MemoryPrincipal principal) {
+    public SseEmitter chatStream(String message, String threadId, String requestId, Long userId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         String conversationId = "react_agent_" + threadId;
-        // 长期记忆主体：登录用户跨会话共享同一份画像，游客按设备 id 隔离；
-        // 无身份线索时为 null，此时只启用会话内短期记忆
-        String subjectKey = principal == null || !principal.available() ? null : principal.subjectKey();
+        // 长期记忆作用域：登录用户跨会话共享同一份画像；为 null 时只启用会话内短期记忆
+        Long memoryUserId = userId;
 
         // 1. 新流挤掉同会话的旧流（用户连点时旧流可能在别的实例上，走 Redis 活跃表）
         cancelService.cancelStaleByThreadId(threadId, requestId);
@@ -171,11 +169,11 @@ public class TripAgentServiceImpl implements TripAgentService {
                 RunnableConfig config = RunnableConfig.builder()
                         .threadId(threadId)
                         // 流式执行跑在 Reactor 线程，ThreadLocal 传不过去，故同时放进元数据。
-                        // 短期记忆（conversationId）与长期记忆（subjectKey）走同一条通道：
+                        // 短期记忆（conversationId）与长期记忆（userId）走同一条通道：
                         // 前者由记忆拦截器消费，后者由长期记忆拦截器与召回工具消费
                         .addMetadata(ConversationMemoryInterceptor.CONVERSATION_ID_KEY, conversationId)
                         .addMetadata(CardSink.METADATA_KEY, cardSink)
-                        .addMetadata(MemoryConstants.SUBJECT_KEY_METADATA, subjectKey)
+                        .addMetadata(MemoryConstants.USER_ID_METADATA, memoryUserId)
                         .build();
 
                 StreamEventRouter router = new StreamEventRouter(new StreamEventRouter.StreamSink() {
@@ -292,8 +290,8 @@ public class TripAgentServiceImpl implements TripAgentService {
                 // 必须与"回答已经生成完"解耦——用户不该因为后台在总结经验而多等一秒。
                 // 触发策略改为"每累计 10 轮才抽一段（最近 10 轮）"，由调度服务内部计数；
                 // 是否确需提取由抽取 Agent（LLM）自行判断，无需提取时不落库。
-                if (subjectKey != null && !answer.isEmpty()) {
-                    memoryExtractionService.extractAsync(subjectKey, conversationId);
+                if (memoryUserId != null && !answer.isEmpty()) {
+                    memoryExtractionService.extractAsync(memoryUserId, conversationId);
                 }
                 ConversationContextHolder.clear();
                 generationRegistry.unregister(requestId);

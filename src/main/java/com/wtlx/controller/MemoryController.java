@@ -8,12 +8,11 @@ import com.wtlx.domain.entity.memory.MemoryOverviewVO;
 import com.wtlx.domain.entity.memory.UserMemory;
 import com.wtlx.infrastructure.memory.retrieval.MemoryRetrievalService;
 import com.wtlx.infrastructure.memory.schema.MemorySchemaInitializer;
-import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
-import com.wtlx.infrastructure.memory.support.MemorySubjectResolver;
 import com.wtlx.repository.mapper.ConversationMessageMapper;
 import com.wtlx.repository.mapper.ConversationSummaryMapper;
 import com.wtlx.repository.mapper.UserMemoryMapper;
 import com.wtlx.service.ConversationMemoryService;
+import com.wtlx.utils.UserHolder;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import jakarta.annotation.Resource;
@@ -37,7 +36,7 @@ import java.util.Map;
  * <p>
  * 与 {@code RagAdminController} 同族，映射在 {@code /ai/**} 下。
  * <b>所有接口要求登录</b>（{@code LoginInterceptor} 已在 {@code /ai/**} 生效），
- * 记忆主体统一取当前登录用户，不支持指定他人——越权读写他人画像比接口报错严重得多，
+ * 记忆作用域统一取当前登录用户，不支持指定他人——越权读写他人画像比接口报错严重得多，
  * 因此根本没有"换一个 userId 查查"这个入口。
  *
  * @author 金小梁
@@ -57,9 +56,6 @@ public class MemoryController {
      * 概览里回溯的最近消息条数
      */
     private static final int OVERVIEW_RECENT_MESSAGES = 6;
-
-    @Resource
-    private MemorySubjectResolver memorySubjectResolver;
 
     @Resource
     private MemoryRetrievalService memoryRetrievalService;
@@ -83,10 +79,10 @@ public class MemoryController {
     @GetMapping("/overview")
     public Result overview(@RequestParam(required = false) String conversationId,
                            @RequestParam(required = false) String query) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
+        Long userId = currentUserId();
 
         MemoryOverviewVO overview = new MemoryOverviewVO();
-        overview.setSubjectKey(principal.subjectKey());
+        overview.setUserId(userId);
 
         // 短期记忆：作用域是会话，换 threadId 就变
         if (StringUtils.hasText(conversationId)) {
@@ -95,10 +91,10 @@ public class MemoryController {
 
         // 长期记忆：作用域是用户，换 threadId 不变
         MemoryOverviewVO.LongTermScope longTerm = new MemoryOverviewVO.LongTermScope();
-        longTerm.setActiveCount(userMemoryMapper.countActive(principal.subjectKey()));
-        longTerm.setCountByType(userMemoryMapper.countActiveByType(principal.subjectKey()));
+        longTerm.setActiveCount(userMemoryMapper.countActive(userId));
+        longTerm.setCountByType(userMemoryMapper.countActiveByType(userId));
         if (StringUtils.hasText(query)) {
-            List<MemoryHit> hits = memoryRetrievalService.retrieve(principal.subjectKey(), query);
+            List<MemoryHit> hits = memoryRetrievalService.retrieve(userId, query);
             overview.setHits(hits);
             longTerm.setHitCount(hits.size());
         }
@@ -111,9 +107,9 @@ public class MemoryController {
     public Result list(@RequestParam(required = false) String type,
                        @RequestParam(required = false, defaultValue = "ACTIVE") String status,
                        @RequestParam(required = false) Integer limit) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
-        List<UserMemory> memories = userMemoryMapper.listBySubject(
-                principal.subjectKey(), type, status, clampLimit(limit, 50));
+        Long userId = currentUserId();
+        List<UserMemory> memories = userMemoryMapper.listByUser(
+                userId, type, status, clampLimit(limit, 50));
         return Result.ok(memories);
     }
 
@@ -121,11 +117,11 @@ public class MemoryController {
     @GetMapping("/search")
     public Result search(@RequestParam String query,
                          @RequestParam(required = false) Integer topN) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
+        Long userId = currentUserId();
         List<MemoryHit> hits = memoryRetrievalService.retrieve(
-                principal.subjectKey(), query, clampLimit(topN, 8));
+                userId, query, clampLimit(topN, 8));
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("subjectKey", principal.subjectKey());
+        payload.put("userId", userId);
         payload.put("query", query);
         payload.put("hitCount", hits.size());
         payload.put("hits", hits);
@@ -135,16 +131,16 @@ public class MemoryController {
     @ApiOperation("删除单条记忆（软删）")
     @DeleteMapping("/{memoryId}")
     public Result deleteOne(@PathVariable String memoryId) {
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
-        int rows = userMemoryMapper.markDeleted(principal.subjectKey(), memoryId);
+        Long userId = currentUserId();
+        int rows = userMemoryMapper.markDeleted(userId, memoryId);
         return rows > 0 ? Result.ok("已删除") : Result.fail("未找到该记忆或已被删除");
     }
 
     @ApiOperation("清空当前用户的全部长期记忆（物理删除，含历史行）")
     @DeleteMapping
     public Result deleteSubject() {
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
-        int rows = userMemoryMapper.deleteBySubject(principal.subjectKey());
+        Long userId = currentUserId();
+        int rows = userMemoryMapper.deleteByUser(userId);
         return Result.ok("已清空 " + rows + " 条记忆");
     }
 
@@ -159,6 +155,13 @@ public class MemoryController {
     @GetMapping("/stats")
     public Result stats() {
         return Result.ok(userMemoryMapper.countAllActiveByType());
+    }
+
+    /**
+     * 记忆作用域：{@code /ai/**} 已要求登录，直接取当前用户 id
+     */
+    private Long currentUserId() {
+        return UserHolder.getUser().getId();
     }
 
     /**

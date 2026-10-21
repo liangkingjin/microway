@@ -119,22 +119,22 @@ public class MemoryMergeService {
     /**
      * 合并一批候选并落库
      *
-     * @param subjectKey 记忆主体键
+     * @param userId 记忆主体键
      * @param sourceRef  来源会话 id（写入证据链）
      * @param candidates 抽取出的候选
      * @return 合并结果统计
      */
-    public MergeOutcome merge(String subjectKey, String sourceRef, List<MemoryCandidate> candidates) {
-        if (!StringUtils.hasText(subjectKey) || candidates == null || candidates.isEmpty()) {
+    public MergeOutcome merge(Long userId, String sourceRef, List<MemoryCandidate> candidates) {
+        if (userId == null || candidates == null || candidates.isEmpty()) {
             return MergeOutcome.empty();
         }
-        Lock lock = subjectLocks.get(subjectKey);
+        Lock lock = subjectLocks.get(userId);
         lock.lock();
         try {
             Map<MemoryDecision, Integer> counts = new EnumMap<>(MemoryDecision.class);
             for (MemoryCandidate candidate : candidates) {
                 try {
-                    applyOne(subjectKey, sourceRef, candidate, counts);
+                    applyOne(userId, sourceRef, candidate, counts);
                 } catch (Exception e) {
                     // 单条候选失败不影响整批：一批里通常有若干独立信息，不该因一条格式异常全丢
                     log.warn("记忆候选合并失败，跳过该条: content={}, 原因={}",
@@ -151,7 +151,7 @@ public class MemoryMergeService {
     /**
      * 单条候选的完整判定与落库流程
      */
-    private void applyOne(String subjectKey, String sourceRef, MemoryCandidate candidate,
+    private void applyOne(Long userId, String sourceRef, MemoryCandidate candidate,
                           Map<MemoryDecision, Integer> counts) {
         // 1. 已过有效期的候选直接丢弃（模型有时会抽出已经发生过的行程）
         if (candidate.getValidTo() != null && candidate.getValidTo().isBefore(LocalDateTime.now())) {
@@ -165,7 +165,7 @@ public class MemoryMergeService {
 
         // 2. 指纹级去重：完全相同的槽位 + 取值 → 只巩固。
         // 纯字符串比较，先于向量化执行，避免给注定 NOOP 的重复候选白付一次 embedding
-        UserMemory exact = userMemoryMapper.findActiveByDedupKey(subjectKey, dedupKey);
+        UserMemory exact = userMemoryMapper.findActiveByDedupKey(userId, dedupKey);
         if (exact != null) {
             userMemoryMapper.confirm(exact.getId(), candidate.getConfidence(), candidate.getEvidence());
             record(counts, MemoryDecision.NOOP);
@@ -176,10 +176,10 @@ public class MemoryMergeService {
         String literal = memoryEmbeddingService.embedToLiteral(content);
 
         // 3. 收集相关记忆：同槽位（语义冲突与相似度无关）+ 向量近邻
-        List<UserMemory> sameSlot = userMemoryMapper.findActiveByKey(subjectKey, key, 3);
+        List<UserMemory> sameSlot = userMemoryMapper.findActiveByKey(userId, key, 3);
         List<ScoredMemory> nearBy = literal == null
                 ? List.of()
-                : userMemoryMapper.findSimilarActive(subjectKey, literal, memoryProperties.getSemanticSearchTopK());
+                : userMemoryMapper.findSimilarActive(userId, literal, memoryProperties.getSemanticSearchTopK());
         List<ScoredMemory> related = unionRelated(sameSlot, nearBy);
         double bestSimilarity = nearBy.isEmpty() ? 0D : nearBy.get(0).pathScore();
 
@@ -187,7 +187,7 @@ public class MemoryMergeService {
         Decision decision = decide(candidate, content, sameSlot, nearBy, related, bestSimilarity);
 
         // 5. 落地
-        apply(subjectKey, sourceRef, candidate, key, content, contentHash, dedupKey, literal, decision);
+        apply(userId, sourceRef, candidate, key, content, contentHash, dedupKey, literal, decision);
         record(counts, decision.decision());
     }
 
@@ -266,10 +266,10 @@ public class MemoryMergeService {
     /**
      * 按决策落地写库
      */
-    private void apply(String subjectKey, String sourceRef, MemoryCandidate candidate, String key,
+    private void apply(Long userId, String sourceRef, MemoryCandidate candidate, String key,
                        String content, String contentHash, String dedupKey, String literal, Decision decision) {
         switch (decision.decision()) {
-            case ADD -> insertNew(subjectKey, sourceRef, candidate, key, content, contentHash, dedupKey, literal,
+            case ADD -> insertNew(userId, sourceRef, candidate, key, content, contentHash, dedupKey, literal,
                     decision.reason());
 
             case UPDATE -> {
@@ -292,7 +292,7 @@ public class MemoryMergeService {
 
             case SUPERSEDE -> {
                 UserMemory target = decision.target();
-                String newMemoryId = insertNew(subjectKey, sourceRef, candidate, key, content, contentHash,
+                String newMemoryId = insertNew(userId, sourceRef, candidate, key, content, contentHash,
                         dedupKey, literal, decision.reason());
                 if (newMemoryId != null) {
                     userMemoryMapper.supersede(target.getId(), newMemoryId);
@@ -316,13 +316,12 @@ public class MemoryMergeService {
     /**
      * 插入新记忆（状态 ACTIVE），返回其对外标识；唯一约束冲突时视为重复并返回 null
      */
-    private String insertNew(String subjectKey, String sourceRef, MemoryCandidate candidate, String key,
+    private String insertNew(Long userId, String sourceRef, MemoryCandidate candidate, String key,
                              String content, String contentHash, String dedupKey, String literal, String reason) {
         String memoryId = UUID.randomUUID().toString();
         UserMemory memory = new UserMemory();
         memory.setMemoryId(memoryId);
-        memory.setSubjectKey(subjectKey);
-        memory.setUserId(extractUserId(subjectKey));
+        memory.setUserId(userId);
         memory.setMemoryType(candidate.getType().getCode());
         memory.setMemoryKey(key);
         memory.setContent(content);
@@ -361,17 +360,6 @@ public class MemoryMergeService {
             merged.putIfAbsent(scored.memory().getMemoryId(), scored);
         }
         return new ArrayList<>(merged.values());
-    }
-
-    /**
-     * 从主体键解析 userId 落库（便于业务侧按用户 id 直查，不必再解析前缀）
-     */
-    private String extractUserId(String subjectKey) {
-        if (subjectKey.startsWith(MemoryConstants.SUBJECT_USER_PREFIX)) {
-            String userId = subjectKey.substring(MemoryConstants.SUBJECT_USER_PREFIX.length());
-            return userId.length() > 64 ? userId.substring(0, 64) : userId;
-        }
-        return null;
     }
 
     private void record(Map<MemoryDecision, Integer> counts, MemoryDecision decision) {

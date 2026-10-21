@@ -118,29 +118,6 @@ public class MemoryNormalizer {
         return sha256(normalized).substring(0, VALUE_HASH_LEN);
     }
 
-    /**
-     * 主体键清洗：只保留字母数字、下划线、冒号、短横线，防止拼接进 Redis 键或 SQL 参数时引入噪音
-     */
-    public String sanitizeSubjectKey(String subjectKey) {
-        if (subjectKey == null || subjectKey.isBlank()) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder(subjectKey.length());
-        for (int i = 0; i < subjectKey.length(); i++) {
-            char c = subjectKey.charAt(i);
-            if (Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '-' || c == '.') {
-                sb.append(c);
-            }
-        }
-        String cleaned = sb.toString();
-        if (cleaned.isBlank()) {
-            return null;
-        }
-        return cleaned.length() > MemoryConstants.SUBJECT_KEY_MAX_LEN
-                ? cleaned.substring(0, MemoryConstants.SUBJECT_KEY_MAX_LEN)
-                : cleaned;
-    }
-
     private String trimDots(String value) {
         int start = 0;
         int end = value.length();

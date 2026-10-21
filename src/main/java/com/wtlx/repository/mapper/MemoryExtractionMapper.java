@@ -8,7 +8,7 @@ import org.springframework.stereotype.Repository;
 /**
  * 记忆抽取台账数据访问（段级抽取观测）。
  * <p>
- * 段级抽取后，用 {@code (subject_key, conversation_id, turn_hash)} 唯一约束 +
+ * 段级抽取后，用 {@code (user_id, conversation_id, turn_hash)} 唯一约束 +
  * {@code ON CONFLICT DO NOTHING} 记录"某段记录已被抽取过"，既便于观测抽取质量
  * （候选数 / 落库数），又能在重试时避免同一段重复记行。这里的 {@code turn_hash} 列
  * 复用作"段指纹"。真正的去重由合并闸门的 {@code dedup_key} 唯一索引负责，
@@ -29,15 +29,15 @@ public class MemoryExtractionMapper {
      *
      * @param segmentHash 段指纹：conversationId + 段内消息 id 序列的哈希
      */
-    public void recordSegment(String subjectKey, String conversationId, String segmentHash,
+    public void recordSegment(Long userId, String conversationId, String segmentHash,
                              int candidateCount, int appliedCount) {
         try {
             jdbcTemplate.update("""
-                            INSERT INTO user_memory_extraction (subject_key, conversation_id, turn_hash, candidate_count, applied_count)
+                            INSERT INTO user_memory_extraction (user_id, conversation_id, turn_hash, candidate_count, applied_count)
                             VALUES (?, ?, ?, ?, ?)
-                            ON CONFLICT (subject_key, conversation_id, turn_hash) DO NOTHING
+                            ON CONFLICT (user_id, conversation_id, turn_hash) DO NOTHING
                             """,
-                    subjectKey, conversationId, segmentHash, candidateCount, appliedCount);
+                    userId, conversationId, segmentHash, candidateCount, appliedCount);
         } catch (Exception e) {
             log.warn("记忆段抽取台账写入失败: {}", e.getMessage());
         }

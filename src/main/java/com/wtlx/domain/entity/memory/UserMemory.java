@@ -30,15 +30,10 @@ public class UserMemory {
     private String memoryId;
 
     /**
-     * 记忆主体键，恒为登录用户的 {@code user:<userId>}。
-     * 这是长期记忆的作用域边界，所有读写必须带它，防止跨用户串记忆
+     * 记忆作用域：登录用户 id。
+     * 这是长期记忆的隔离边界，所有读写必须带它，防止跨用户串记忆
      */
-    private String subjectKey;
-
-    /**
-     * 登录用户 id；游客记忆为 null
-     */
-    private String userId;
+    private Long userId;
 
     /**
      * 记忆类型编码，见 {@code MemoryType}

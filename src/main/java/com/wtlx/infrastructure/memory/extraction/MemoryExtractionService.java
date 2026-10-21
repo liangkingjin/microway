@@ -85,11 +85,11 @@ public class MemoryExtractionService {
      * 入参只需身份与会话——要抽取的"段"直接从会话库里取最近若干轮，
      * 不再依赖调用方逐轮透传 user/assistant 文本。
      *
-     * @param subjectKey     记忆主体键；为 null 时静默跳过（无登录态，正常链路下不会发生）
+     * @param userId     记忆主体键；为 null 时静默跳过（无登录态，正常链路下不会发生）
      * @param conversationId 会话 id，用于取该段记录与冲突校验的作用域
      */
-    public void extractAsync(String subjectKey, String conversationId) {
-        if (!StringUtils.hasText(subjectKey) || !StringUtils.hasText(conversationId)) {
+    public void extractAsync(Long userId, String conversationId) {
+        if (userId == null || !StringUtils.hasText(conversationId)) {
             return;
         }
         if (!memoryProperties.isEnabled() || !memoryProperties.isExtractionEnabled()) {
@@ -101,7 +101,7 @@ public class MemoryExtractionService {
         }
         pendingRounds.invalidate(conversationId); // 触发后清掉计数，准备下一段
         try {
-            memoryExtractionExecutor.execute(() -> extractSegmentNow(subjectKey, conversationId));
+            memoryExtractionExecutor.execute(() -> extractSegmentNow(userId, conversationId));
         } catch (Exception e) {
             // 线程池拒绝（极端情况）：不能影响对话收尾
             log.warn("记忆段抽取任务提交失败，本段不抽取: {}", e.getMessage());
@@ -113,7 +113,7 @@ public class MemoryExtractionService {
      *
      * @return 实际落库条数
      */
-    private int extractSegmentNow(String subjectKey, String conversationId) {
+    private int extractSegmentNow(Long userId, String conversationId) {
         try {
             int messageLimit = memoryProperties.getSegmentMaxRounds() * 2;
             List<ConversationMessage> segment = conversationMemoryService.loadRecentMessages(conversationId, messageLimit);
@@ -124,7 +124,7 @@ public class MemoryExtractionService {
             // 提取完全基于 LLM：是否值得抽取由模型判断，无需提取时返回空
             List<MemoryCandidate> candidates = memoryLlmAgent.extractSegment(segment);
             if (candidates.isEmpty()) {
-                memoryExtractionMapper.recordSegment(subjectKey, conversationId,
+                memoryExtractionMapper.recordSegment(userId, conversationId,
                         segmentHash(conversationId, segment), 0, 0);
                 return 0;
             }
@@ -137,15 +137,15 @@ public class MemoryExtractionService {
 
             // 冲突校验（检测并标记 / 必要时消解新记录与已有数据间的冲突）后落库
             MemoryMergeService.MergeOutcome outcome =
-                    memoryMergeService.merge(subjectKey, conversationId, limited);
+                    memoryMergeService.merge(userId, conversationId, limited);
 
-            memoryExtractionMapper.recordSegment(subjectKey, conversationId,
+            memoryExtractionMapper.recordSegment(userId, conversationId,
                     segmentHash(conversationId, segment), limited.size(), outcome.appliedCount());
             log.info("长期记忆段抽取完成, subject: {}, 候选 {} 条, 落库 {} 条, 决策分布 {}",
-                    subjectKey, limited.size(), outcome.appliedCount(), outcome.summary());
+                    userId, limited.size(), outcome.appliedCount(), outcome.summary());
             return outcome.appliedCount();
         } catch (Exception e) {
-            log.error("长期记忆段抽取失败, subject: {}, conversationId: {}", subjectKey, conversationId, e);
+            log.error("长期记忆段抽取失败, subject: {}, conversationId: {}", userId, conversationId, e);
             return 0;
         }
     }

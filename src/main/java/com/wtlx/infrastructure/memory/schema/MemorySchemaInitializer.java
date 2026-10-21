@@ -89,31 +89,52 @@ public class MemorySchemaInitializer implements ApplicationRunner {
     /**
      * 读取 DDL 脚本并切分为单条语句。
      * <p>
-     * 切分依据是"行尾分号"：本脚本只含 DDL，不含 PL/pgSQL 函数体，
-     * 也没有把分号写进字符串字面量的场景，因此无需引入 SQL 解析器；
-     * {@code --} 注释行与空行直接跳过。
+     * 切分依据是分号，但 {@code $$ ... $$}（PL/pgSQL 匿名块）<b>内部</b>的分号不是语句终止符——
+     * 本脚本用 DO 块承载"subject_key → user_id"的幂等迁移，因此切分器必须识别美元引用状态。
+     * 仍然不引入 SQL 解析器：脚本没有把分号写进普通字符串字面量的场景，
+     * 只需按美元引用状态决定分号是否终止即可；{@code --} 整行注释与空行直接跳过。
      */
     private List<String> loadStatements() throws IOException {
         ClassPathResource resource = new ClassPathResource(DDL_SCRIPT);
         String script = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-        List<String> statements = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
+        // 1) 去掉整行注释与空行（行内注释保留，PG 能正确处理）
+        StringBuilder body = new StringBuilder();
         for (String line : script.split("\\R")) {
             String trimmed = line.trim();
             if (trimmed.isEmpty() || trimmed.startsWith("--")) {
                 continue;
             }
-            current.append(trimmed).append('\n');
-            if (trimmed.endsWith(";")) {
-                String statement = current.toString().trim();
-                statements.add(statement.substring(0, statement.length() - 1));
-                current.setLength(0);
-            }
+            body.append(trimmed).append('\n');
         }
-        if (!current.toString().isBlank()) {
+
+        // 2) 按分号切分，但跳过 $$ ... $$ 内部的分号（DO 块体）
+        List<String> statements = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inDollarQuote = false;
+        String text = body.toString();
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '$' && i + 1 < text.length() && text.charAt(i + 1) == '$') {
+                inDollarQuote = !inDollarQuote;
+                current.append("$$");
+                i++;
+                continue;
+            }
+            if (c == ';' && !inDollarQuote) {
+                String statement = current.toString().trim();
+                if (!statement.isEmpty()) {
+                    statements.add(statement);
+                }
+                current.setLength(0);
+                continue;
+            }
+            current.append(c);
+        }
+        String tail = current.toString().trim();
+        if (!tail.isEmpty()) {
             // 兜底：最后一条忘了写分号也照常执行，而不是静默丢弃
-            statements.add(current.toString().trim());
+            statements.add(tail);
         }
         return statements;
     }

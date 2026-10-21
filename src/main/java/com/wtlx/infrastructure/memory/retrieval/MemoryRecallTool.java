@@ -23,7 +23,7 @@ import org.springframework.util.StringUtils;
  * 只有被动召回会让用户感觉"系统真的记得我"，但只有主动注入才能保证模型在规划行程时
  * 真的用上了偏好。两者缺一不可。
  * <p>
- * 身份来源与注入链路一致：从 {@code RunnableConfig} 元数据取主体键。
+ * 身份来源与注入链路一致：从 {@code RunnableConfig} 元数据取当前用户 id。
  * 工具执行在 Reactor 线程上够不到 ThreadLocal，这条通道与 RAG 卡片出口用的是同一条。
  *
  * @author 金小梁
@@ -44,8 +44,8 @@ public class MemoryRecallTool {
      * 检索当前用户的长期记忆
      *
      * @param query       想确认的信息，例如"用户的饮食偏好""用户的出行时间"
-     * @param toolContext 框架注入的工具上下文（不进入工具 schema），用于取记忆主体
-     * @return 记忆文本；无主体或无记忆时返回明确说明
+     * @param toolContext 框架注入的工具上下文（不进入工具 schema），用于取记忆作用域
+     * @return 记忆文本；无用户或无记忆时返回明确说明
      */
     @Tool(description = "检索系统已沉淀的当前用户长期记忆，包含跨会话累积的旅行偏好、忌口、预算档位、"
             + "同行情况、出行计划等。当需要确认用户的个性化偏好，或用户询问"
@@ -53,38 +53,38 @@ public class MemoryRecallTool {
     public String recallUserMemory(
             @ToolParam(description = "想确认的用户信息，例如「用户的饮食忌口」「用户偏好哪种住宿」") String query,
             ToolContext toolContext) {
-        String subjectKey = resolveSubjectKey(toolContext);
-        if (!StringUtils.hasText(subjectKey)) {
-            log.debug("工具执行上下文缺少记忆主体，无法召回长期记忆");
+        Long userId = resolveUserId(toolContext);
+        if (userId == null) {
+            log.debug("工具执行上下文缺少用户身份，无法召回长期记忆");
             return "当前会话未关联到用户身份，无法检索长期记忆。请直接询问用户相关偏好。";
         }
         if (!StringUtils.hasText(query)) {
             return "请给出需要确认的信息维度后再检索。";
         }
 
-        MemoryContextBuilder.MemoryPrompt prompt = memoryContextBuilder.build(subjectKey, query, RECALL_TOP_N);
+        MemoryContextBuilder.MemoryPrompt prompt = memoryContextBuilder.build(userId, query, RECALL_TOP_N);
         if (prompt.isEmpty()) {
-            log.info("长期记忆召回为空, subject: {}, query: {}", subjectKey, query);
+            log.info("长期记忆召回为空, userId: {}, query: {}", userId, query);
             return "系统中暂未沉淀该用户的长期记忆（查询：" + query + "）。";
         }
-        log.info("长期记忆召回成功, subject: {}, query: {}, 命中 {} 条", subjectKey, query, prompt.hits().size());
+        log.info("长期记忆召回成功, userId: {}, query: {}, 命中 {} 条", userId, query, prompt.hits().size());
         return prompt.text();
     }
 
     /**
-     * 从工具上下文取记忆主体键
+     * 从工具上下文取当前用户 id
      * <p>
      * {@code RunnableConfig} 由框架放在 {@code ToolContext} 的 {@code _AGENT_CONFIG_} 键上，
-     * 主体键挂在它的 metadata 里随请求下发。
+     * 用户 id 挂在它的 metadata 里随请求下发。
      */
-    private String resolveSubjectKey(ToolContext toolContext) {
+    private Long resolveUserId(ToolContext toolContext) {
         if (toolContext == null) {
             return null;
         }
         return ToolContextHelper.getConfig(toolContext)
-                .flatMap(config -> config.metadata(MemoryConstants.SUBJECT_KEY_METADATA))
-                .filter(String.class::isInstance)
-                .map(String.class::cast)
+                .flatMap(config -> config.metadata(MemoryConstants.USER_ID_METADATA))
+                .filter(Long.class::isInstance)
+                .map(Long.class::cast)
                 .orElse(null);
     }
 }

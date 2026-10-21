@@ -47,20 +47,20 @@ public class MemoryRetrievalService {
     /**
      * 按默认配置检索（retrievalTopN 条）
      */
-    public List<MemoryHit> retrieve(String subjectKey, String query) {
-        return retrieve(subjectKey, query, memoryProperties.getRetrievalTopN());
+    public List<MemoryHit> retrieve(Long userId, String query) {
+        return retrieve(userId, query, memoryProperties.getRetrievalTopN());
     }
 
     /**
      * 单路向量检索
      *
-     * @param subjectKey 记忆主体键
+     * @param userId 记忆主体键
      * @param query      用户查询
      * @param topN       返回条数
      * @return 命中，按相似度降序；主体缺失、开关关闭、无查询或 embedding 不可用时返回空列表
      */
-    public List<MemoryHit> retrieve(String subjectKey, String query, int topN) {
-        if (!memoryProperties.isEnabled() || !StringUtils.hasText(subjectKey) || !StringUtils.hasText(query)) {
+    public List<MemoryHit> retrieve(Long userId, String query, int topN) {
+        if (!memoryProperties.isEnabled() || userId == null || !StringUtils.hasText(query)) {
             return List.of();
         }
 
@@ -73,9 +73,9 @@ public class MemoryRetrievalService {
         }
 
         List<ScoredMemory> scored = userMemoryMapper.searchByVector(
-                subjectKey, queryVectorLiteral, memoryProperties.getVectorTopK(), memoryProperties.getVectorThreshold());
+                userId, queryVectorLiteral, memoryProperties.getVectorTopK(), memoryProperties.getVectorThreshold());
         if (scored == null || scored.isEmpty()) {
-            log.info("长期记忆检索完成, subject: {}, 命中 0 条", subjectKey);
+            log.info("长期记忆检索完成, subject: {}, 命中 0 条", userId);
             return List.of();
         }
 
@@ -90,7 +90,7 @@ public class MemoryRetrievalService {
                 hits.add(hit);
             }
         }
-        log.info("长期记忆检索完成, subject: {}, 命中 {} 条", subjectKey, hits.size());
+        log.info("长期记忆检索完成, subject: {}, 命中 {} 条", userId, hits.size());
         return hits;
     }
 

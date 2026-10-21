@@ -4,10 +4,9 @@ import com.wtlx.infrastructure.cancel.GenerationCancelService;
 import com.wtlx.domain.entity.conversation.ConversationMessage;
 import com.wtlx.domain.entity.conversation.enums.MessageRole;
 import com.wtlx.domain.entity.dto.ai.TripCardVO;
-import com.wtlx.infrastructure.memory.support.MemoryPrincipal;
-import com.wtlx.infrastructure.memory.support.MemorySubjectResolver;
 import com.wtlx.service.ConversationMemoryService;
 import com.wtlx.service.TripAgentService;
+import com.wtlx.utils.UserHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -47,9 +46,6 @@ public class AiController {
     private GenerationCancelService generationCancelService;
 
     @Resource
-    private MemorySubjectResolver memorySubjectResolver;
-
-    @Resource
     private ObjectMapper objectMapper;
 
     /**
@@ -70,10 +66,10 @@ public class AiController {
         if (requestId == null || requestId.isEmpty()) {
             requestId = UUID.randomUUID().toString();
         }
-        // 记忆主体在控制层解析：身份来自拦截器建立的登录态（ThreadLocal 只在同一线程可读），
-        // 服务层只消费解析结果。'/ai/**' 已要求登录，故这里必然拿到真实用户。
-        MemoryPrincipal principal = memorySubjectResolver.resolve();
-        return tripAgentService.chatStream(message, threadId, requestId, principal);
+        // 身份只能在请求线程取（ThreadLocal），下游 Reactor 线程靠 RunnableConfig 元数据传递。
+        // '/ai/**' 已要求登录，故这里必然拿到真实用户
+        Long userId = UserHolder.getUser().getId();
+        return tripAgentService.chatStream(message, threadId, requestId, userId);
     }
 
     /**

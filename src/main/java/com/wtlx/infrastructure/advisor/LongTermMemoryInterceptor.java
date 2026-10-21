@@ -24,7 +24,7 @@ import java.util.Map;
  * <ul>
  *     <li>短期记忆回答"<b>这一轮在聊什么</b>"——摘要 + 最近若干轮原文，作用域 {@code conversationId}，
  *         会话结束即失去价值；</li>
- *     <li>长期记忆回答"<b>这个人是谁、偏好什么</b>"——用户画像，作用域 {@code subjectKey}，
+ *     <li>长期记忆回答"<b>这个人是谁、偏好什么</b>"——用户画像，作用域为当前用户 id，
  *         跨 threadId 稳定复用。</li>
  * </ul>
  * 两者都是"注入系统提示"，但来源、生命周期、检索方式完全不同，因此拆成两个拦截器：
@@ -54,8 +54,8 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
     @Override
     public ModelResponse interceptModel(ModelRequest request, ModelCallHandler handler) {
         try {
-            String subjectKey = resolveSubjectKey(request);
-            if (!StringUtils.hasText(subjectKey)) {
+            Long userId = resolveUserId(request);
+            if (userId == null) {
                 // 无登录态：正常链路下不会发生（'/ai/**' 已要求登录）。
                 // 兜底跳过长期记忆注入，对话照常进行——记忆是增强不是依赖
                 return handler.call(request);
@@ -65,7 +65,7 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
                 return handler.call(request);
             }
 
-            MemoryContextBuilder.MemoryPrompt memoryPrompt = memoryContextBuilder.build(subjectKey, query);
+            MemoryContextBuilder.MemoryPrompt memoryPrompt = memoryContextBuilder.build(userId, query);
             if (memoryPrompt.isEmpty()) {
                 return handler.call(request);
             }
@@ -87,8 +87,8 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
                     .context(request.getContext())
                     .build();
 
-            log.debug("注入长期记忆, subject: {}, 命中 {} 条, 文本长度 {}",
-                    subjectKey, memoryPrompt.hits().size(), memoryPrompt.text().length());
+            log.debug("注入长期记忆, userId: {}, 命中 {} 条, 文本长度 {}",
+                    userId, memoryPrompt.hits().size(), memoryPrompt.text().length());
             return handler.call(enhancedRequest);
         } catch (Exception e) {
             log.warn("长期记忆注入失败，本轮降级为无长期记忆: {}", e.getMessage());
@@ -97,19 +97,19 @@ public class LongTermMemoryInterceptor extends ModelInterceptor {
     }
 
     /**
-     * 从 {@code RunnableConfig} 元数据取记忆主体键。
+     * 从 {@code RunnableConfig} 元数据取当前登录用户 id。
      * <p>
      * 与 conversationId 同理：整条链路跑在 Reactor 线程上，ThreadLocal 传不过来，
-     * 元数据是唯一可靠通道。键名与召回工具共用 {@link MemoryConstants#SUBJECT_KEY_METADATA}，
+     * 元数据是唯一可靠通道。键名与召回工具共用 {@link MemoryConstants#USER_ID_METADATA}，
      * 不在此处另立常量，避免两处同值常量各自漂移。
      */
-    private String resolveSubjectKey(ModelRequest request) {
+    private Long resolveUserId(ModelRequest request) {
         Map<String, Object> context = request.getContext();
         if (context == null) {
             return null;
         }
-        Object value = context.get(MemoryConstants.SUBJECT_KEY_METADATA);
-        return value instanceof String subjectKey && !subjectKey.isBlank() ? subjectKey : null;
+        Object value = context.get(MemoryConstants.USER_ID_METADATA);
+        return value instanceof Long userId ? userId : null;
     }
 
     /**

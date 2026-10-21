@@ -65,20 +65,20 @@ public class MemoryContextBuilder {
     /**
      * 检索并渲染长期记忆（默认条数）
      */
-    public MemoryPrompt build(String subjectKey, String query) {
-        return build(subjectKey, query, memoryProperties.getRetrievalTopN());
+    public MemoryPrompt build(Long userId, String query) {
+        return build(userId, query, memoryProperties.getRetrievalTopN());
     }
 
     /**
      * 检索并渲染长期记忆
      *
-     * @param subjectKey 记忆主体键
+     * @param userId 记忆主体键
      * @param query      本轮用户查询（作为检索输入）
      * @param topN       最多检索条数
      * @return 渲染结果；无主体、开关关闭或无命中时返回空结果
      */
-    public MemoryPrompt build(String subjectKey, String query, int topN) {
-        List<MemoryHit> hits = memoryRetrievalService.retrieve(subjectKey, query, topN);
+    public MemoryPrompt build(Long userId, String query, int topN) {
+        List<MemoryHit> hits = memoryRetrievalService.retrieve(userId, query, topN);
         if (hits.isEmpty()) {
             return MemoryPrompt.empty();
         }

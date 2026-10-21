@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * 记忆归一化单元测试：去重键 / 取值指纹是合并闸门的地基，纯逻辑、无外部依赖。
@@ -43,12 +42,5 @@ class MemoryNormalizerTest {
     @Test
     void contentHashShouldTrimBeforeHashing() {
         assertEquals(normalizer.contentHash("abc"), normalizer.contentHash("  abc  "));
-    }
-
-    @Test
-    void sanitizeSubjectKeyShouldDropNoiseAndNullWhenEmpty() {
-        assertEquals("user:123", normalizer.sanitizeSubjectKey("user:12 3"));
-        assertNull(normalizer.sanitizeSubjectKey("   "));
-        assertNull(normalizer.sanitizeSubjectKey(null));
     }
 }
