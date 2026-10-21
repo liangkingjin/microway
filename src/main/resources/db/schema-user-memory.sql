@@ -95,6 +95,27 @@ BEGIN
     END IF;
 END $$;
 
+-- user_id 类型守卫：上面的迁移块只检查"列是否存在"、不检查类型。
+-- 历史上个别库曾把 user_id 建成 VARCHAR（等值比较变成 varchar = bigint，直接 bad grammar）。
+-- 类型不对时按文本就地转 BIGINT 并补 NOT NULL；列存在且已是 bigint 时整块跳过。
+DO $$
+DECLARE
+    t text;
+    nullable text;
+BEGIN
+    SELECT data_type, is_nullable INTO t, nullable FROM information_schema.columns
+    WHERE table_name = 'user_memory' AND column_name = 'user_id';
+    IF t IS NOT NULL AND t <> 'bigint' THEN
+        EXECUTE format(
+            'ALTER TABLE user_memory ALTER COLUMN user_id TYPE BIGINT USING NULLIF(user_id::text, %L)::bigint',
+            '');
+    END IF;
+    IF t IS NOT NULL AND nullable = 'YES'
+       AND NOT EXISTS (SELECT 1 FROM user_memory WHERE user_id IS NULL) THEN
+        ALTER TABLE user_memory ALTER COLUMN user_id SET NOT NULL;
+    END IF;
+END $$;
+
 -- 生效记忆的唯一去重约束（部分索引：只约束 ACTIVE，被取代的历史行可保留同名键）
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_memory_active_dedup
     ON user_memory (user_id, dedup_key) WHERE status = 'ACTIVE';
@@ -167,3 +188,17 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_memory_extraction_turn
     ON user_memory_extraction (user_id, conversation_id, turn_hash);
+
+-- 抽取台账的 user_id 类型守卫（与主表同因：历史库可能建成 VARCHAR）
+DO $$
+DECLARE
+    t text;
+BEGIN
+    SELECT data_type INTO t FROM information_schema.columns
+    WHERE table_name = 'user_memory_extraction' AND column_name = 'user_id';
+    IF t IS NOT NULL AND t <> 'bigint' THEN
+        EXECUTE format(
+            'ALTER TABLE user_memory_extraction ALTER COLUMN user_id TYPE BIGINT USING NULLIF(user_id::text, %L)::bigint',
+            '');
+    END IF;
+END $$;
