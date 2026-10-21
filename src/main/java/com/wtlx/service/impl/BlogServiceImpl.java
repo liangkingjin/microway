@@ -32,7 +32,9 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -108,6 +110,38 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
             this.isBlogLiked(blog);
         });
         return Result.ok(records);
+    }
+
+    /**
+     * 游标分页查询所有博客
+     * 按 id 倒序取一页，lastId 为上一页最后一条的 id；lastId 为空时取第一页。
+     * 相比 offset 分页不会因新增/删除数据导致重复或漏读。
+     * @param lastId 游标，可为空
+     * @param pageSize 每页条数，默认 10，上限 50
+     * @return {list: 博客列表, hasMore: 是否还有更多}
+     */
+    @Override
+    public Result queryHotBlogByCursor(Long lastId, Integer pageSize) {
+        int size = (pageSize == null || pageSize <= 0) ? 10 : Math.min(pageSize, 50);
+        List<Blog> records = query()
+                .orderByDesc("id")
+                .lt(lastId != null, "id", lastId)
+                .last("limit " + (size + 1))
+                .list();
+        // 多查 1 条用于判断是否还有下一页
+        boolean hasMore = records.size() > size;
+        if (hasMore) {
+            records = records.subList(0, size);
+        }
+        // 补充用户信息与点赞状态
+        records.forEach(blog -> {
+            this.queryBlogUser(blog);
+            this.isBlogLiked(blog);
+        });
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", records);
+        data.put("hasMore", hasMore);
+        return Result.ok(data);
     }
 
     /**
