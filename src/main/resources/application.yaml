@@ -129,7 +129,7 @@ trip-agent:
     # ---- 抽取（异步子 Agent，段级触发）----
     extraction-enabled: true
     # 每累计多少轮对话触发一次"该段会话记录"的提取（写入链路简化为"每 N 轮抽一段"）
-    extraction-every-rounds: 10
+    extraction-every-rounds: 3
     # 单次抽取覆盖的段大小（轮）：实际加载最近 2*N 条消息
     segment-max-rounds: 10
     # 候选低于该置信度直接丢弃
