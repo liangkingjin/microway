@@ -24,7 +24,9 @@
           </div>
         </div>
       </div>
-      <div class="blog-text" v-html="blog.content"></div>
+      <!-- 正文既要兼容历史 HTML 数据，也要还原新游记里的换行与连续空格，
+           统一走 toDisplayHtml（纯文本转义后 \n→<br>、空格→&nbsp;） -->
+      <div class="blog-text" v-html="toDisplayHtml(blog.content)"></div>
       <!-- 点赞卡：桌面端由 margin-inline 走版心居中，移动端退化为 16px 边距 -->
       <div class="zan-box wt-card">
         <div class="zan-count" :class="{ 'is-liked': blog.isLike }" @click="addLike">
@@ -171,6 +173,7 @@ import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
 import request from '../api/request'
 import { getUrlParam } from '../utils/index'
+import { toDisplayHtml } from '../utils/blogContent'
 
 const router = useRouter()
 
@@ -689,6 +692,9 @@ function go(index) {
   line-height: 1.7;
   color: #333;
   background: #fff;
+  /* &nbsp; 与超长英文串不换行会横向溢出，强制在词内断行 */
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .blog-text img {
   width: 100%;
