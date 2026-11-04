@@ -111,7 +111,7 @@ public class ExpenseTool {
             }
         }
 
-        String summary = "已为计划ID=" + planId + " 记录 " + saved + " 笔账单，合计 ¥" + TravelPlanTool.money(total) + "。";
+        String summary = "已为计划ID=" + planId + " 记录 " + saved + " 笔账单，合计 ¥" + support.money(total) + "。";
         if (!failures.isEmpty()) {
             summary += "\n以下账目未写入：" + String.join("；", failures);
         }
@@ -171,11 +171,14 @@ public class ExpenseTool {
         if (!Boolean.TRUE.equals(result.getSuccess())) {
             return "修改失败：" + (result.getErrorMsg() == null ? "数据库写入异常" : result.getErrorMsg());
         }
-        Expenses latest = support.expenses().getById(expenseId);
+        // 回显用"补丁值优先、未传则取原值"，不再多查一次库
+        String finalTitle = patch.getTitle() != null ? patch.getTitle() : old.getTitle();
+        BigDecimal finalAmount = patch.getAmount() != null ? patch.getAmount() : old.getAmount();
+        LocalDate finalDate = patch.getDate() != null ? patch.getDate() : old.getDate();
         log.info("AI 修改账单, userId: {}, expenseId: {}, planId: {}", userId, expenseId, old.getPlanId());
-        return "已修改账单（ID=" + expenseId + "）：「" + latest.getTitle() + "」¥"
-                + TravelPlanTool.money(latest.getAmount())
-                + (latest.getDate() == null ? "" : "，" + latest.getDate()) + "。";
+        return "已修改账单（ID=" + expenseId + "）：「" + finalTitle + "」¥"
+                + support.money(finalAmount)
+                + (finalDate == null ? "" : "，" + finalDate) + "。";
     }
 
     @Tool(description = "删除某一笔账单，计划总支出会同步扣回该笔金额。"
@@ -198,6 +201,6 @@ public class ExpenseTool {
         }
         log.info("AI 删除账单, userId: {}, expenseId: {}, planId: {}", userId, expenseId, old.getPlanId());
         return "已删除账单（ID=" + expenseId + "）：「" + old.getTitle() + "」¥"
-                + TravelPlanTool.money(old.getAmount()) + "，计划总支出已相应扣减。";
+                + support.money(old.getAmount()) + "，计划总支出已相应扣减。";
     }
 }

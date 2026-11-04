@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -46,8 +47,11 @@ public class TravelPlanToolSupport {
      */
     static final String DEFAULT_PLAN_STATUS = "待出发";
 
-    private static final DateTimeFormatter TIME_LENIENT = DateTimeFormatter.ofPattern("H:mm");
-    private static final DateTimeFormatter TIME_STRICT = DateTimeFormatter.ofPattern("HH:mm");
+    /**
+     * 时间解析格式：{@code H} 与 {@code m} 都是可变宽度，{@code 9:00} / {@code 09:00} / {@code 9:5}
+     * 都能解析——模型给出的时间写法不可控，宽进严出更省一次失败重试。
+     */
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("H:m");
 
     @Resource
     private ITravelPlansService travelPlansService;
@@ -161,7 +165,7 @@ public class TravelPlanToolSupport {
     }
 
     /**
-     * 解析时间：兼容 {@code 9:00} 与 {@code 09:00}
+     * 解析时间：模型既会写 {@code 9:00} 也会写 {@code 09:00}，pattern 用 {@code H} 两种都能解析
      *
      * @throws IllegalArgumentException 格式不合法
      */
@@ -169,15 +173,10 @@ public class TravelPlanToolSupport {
         if (!StringUtils.hasText(text)) {
             throw new IllegalArgumentException(fieldName + "不能为空");
         }
-        String value = text.trim();
         try {
-            return LocalTime.parse(value, value.length() == 4 ? TIME_LENIENT : TIME_STRICT);
+            return LocalTime.parse(text.trim(), TIME_FORMAT);
         } catch (Exception e) {
-            try {
-                return LocalTime.parse(value, TIME_STRICT);
-            } catch (Exception ignored) {
-                throw new IllegalArgumentException(fieldName + "格式应为 HH:mm，例如 09:00，收到：" + text);
-            }
+            throw new IllegalArgumentException(fieldName + "格式应为 HH:mm，例如 09:00，收到：" + text);
         }
     }
 
@@ -198,5 +197,13 @@ public class TravelPlanToolSupport {
         return expensesList.stream()
                 .map(expense -> expense.getAmount() == null ? BigDecimal.ZERO : expense.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 金额展示口径：两位小数，供各工具统一格式化
+     */
+    public String money(BigDecimal amount) {
+        BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
+        return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 }

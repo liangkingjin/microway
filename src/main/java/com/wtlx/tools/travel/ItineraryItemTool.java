@@ -99,8 +99,7 @@ public class ItineraryItemTool {
             }
         }
 
-        String summary = "已为计划ID=" + planId + " 添加 " + saved + " 条行程"
-                + (saved > 0 ? "，更新时间 " + TravelPlanTool.dateFormatter().format(LocalDate.now()) : "") + "。";
+        String summary = "已为计划ID=" + planId + " 添加 " + saved + " 条行程。";
         if (!failures.isEmpty()) {
             summary += "\n以下条目未写入：" + String.join("；", failures);
         }

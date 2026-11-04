@@ -133,7 +133,7 @@
     <!-- 账单添加/编辑弹窗 -->
     <div class="bill-dialog" v-if="showBillDialog">
       <div class="bill-header">
-        <div class="bill-title">{{ isEditingBill ? '编辑账单' : '添加账单' }}</div>
+        <div class="bill-title">{{ editingBillId !== null ? '编辑账单' : '添加账单' }}</div>
         <div class="bill-close-btn" @click="showBillDialog = false">
           <el-icon><Close /></el-icon>
         </div>
@@ -158,7 +158,7 @@
     <!-- 行李清单添加/编辑弹窗 -->
     <div class="luggage-dialog" v-if="showLuggageDialog">
       <div class="luggage-dialog-header">
-        <div class="luggage-dialog-title">{{ isEditingLuggage ? '编辑物品' : '添加物品' }}</div>
+        <div class="luggage-dialog-title">{{ editingLuggageId !== null ? '编辑物品' : '添加物品' }}</div>
         <div class="luggage-close-btn" @click="showLuggageDialog = false">
           <el-icon><Close /></el-icon>
         </div>
@@ -221,9 +221,8 @@ const luggagePacked = ref(false)
 const actionType = ref('itinerary')
 const selectedBill = ref(null)
 const selectedLuggage = ref(null)
-const isEditingBill = ref(false)
+// null = 新增模式；有值 = 正在编辑该条记录（不再单独存 isEditing 布尔，避免两处状态不同步）
 const editingBillId = ref(null)
-const isEditingLuggage = ref(false)
 const editingLuggageId = ref(null)
 
 const expenseTypes = {
@@ -503,13 +502,11 @@ function closeActions() {
 
 function showAddDialog() {
   if (activeTab.value === 'expenses') {
-    isEditingBill.value = false
     editingBillId.value = null
     showBillDialog.value = true
     amount.value = ''
     billRemark.value = ''
   } else if (activeTab.value === 'luggage') {
-    isEditingLuggage.value = false
     editingLuggageId.value = null
     showLuggageDialog.value = true
     luggageName.value = ''
@@ -521,7 +518,6 @@ function showAddDialog() {
 /** 编辑账单：回填备注与金额，日期沿用记录原值（后端未提交的字段保持不变） */
 function editBill() {
   const bill = selectedBill.value
-  isEditingBill.value = true
   editingBillId.value = bill.id
   billRemark.value = bill.remark || (bill.title === '未命名支出' ? '' : bill.title)
   amount.value = bill.amount != null ? String(bill.amount) : ''
@@ -532,7 +528,6 @@ function editBill() {
 /** 编辑行李：回填名称、数量与打包状态 */
 function editLuggage() {
   const item = selectedLuggage.value
-  isEditingLuggage.value = true
   editingLuggageId.value = item.id
   luggageName.value = item.name
   luggageQuantity.value = item.quantity || 1
@@ -619,7 +614,7 @@ function saveBill() {
     return
   }
 
-  const isEditing = isEditingBill.value
+  const isEditing = editingBillId.value !== null
   const expenseData = {
     title: billRemark.value || '未命名支出',
     amount: parsedAmount,
@@ -663,7 +658,7 @@ function saveLuggage() {
     return
   }
 
-  const isEditing = isEditingLuggage.value
+  const isEditing = editingLuggageId.value !== null
   const luggageData = {
     name,
     quantity,

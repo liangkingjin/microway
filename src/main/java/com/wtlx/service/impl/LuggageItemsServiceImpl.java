@@ -62,17 +62,8 @@ public class LuggageItemsServiceImpl extends ServiceImpl<LuggageItemsMapper, Lug
         if (old == null) {
             return Result.fail("物品不存在");
         }
-        // 归属计划不允许通过编辑变更
+        // 归属计划不允许通过编辑变更；未提交的字段由 MyBatis-Plus 的非空更新策略自动保留原值
         luggageItems.setId(id).setPlanId(old.getPlanId());
-        if (luggageItems.getName() == null) {
-            luggageItems.setName(old.getName());
-        }
-        if (luggageItems.getQuantity() == null) {
-            luggageItems.setQuantity(old.getQuantity());
-        }
-        if (luggageItems.getIsPacked() == null) {
-            luggageItems.setIsPacked(old.getIsPacked());
-        }
         if (!updateById(luggageItems)) {
             return Result.fail("修改失败");
         }
