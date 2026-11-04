@@ -1,30 +1,44 @@
 <template>
-  <div v-if="orderedCards.length" class="blog-card-strip">
-    <div class="strip-title">{{ stripTitle }}</div>
+  <div v-if="planCards.length" class="blog-card-strip">
+    <div class="strip-title">旅行计划</div>
     <div class="strip-body">
       <div
-        v-for="card in orderedCards"
-        :key="card.sourceType + '-' + card.sourceId"
-        class="blog-card"
-        :class="{ 'plan-card': isPlan(card) }"
-        @click="open(card)"
+        v-for="card in planCards"
+        :key="'plan-' + card.sourceId"
+        class="blog-card plan-card"
+        @click="openPlan(card)"
       >
-        <!-- 计划没有封面图，用图标位占住同样的位置，两种卡片高度才对得齐 -->
-        <div v-if="isPlan(card)" class="card-icon">
+        <div class="card-icon">
           <el-icon><Calendar /></el-icon>
         </div>
-        <div v-else class="card-cover" :style="coverStyle(card)">
+        <div class="card-info">
+          <div class="card-title">{{ card.title }}</div>
+          <div class="card-meta plan-meta">{{ card.summary }}</div>
+        </div>
+        <el-icon class="plan-arrow"><ArrowRight /></el-icon>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="docCards.length" class="blog-card-strip">
+    <div class="strip-title">参考游记与攻略</div>
+    <div class="strip-body">
+      <div
+        v-for="card in docCards"
+        :key="card.sourceType + '-' + card.sourceId"
+        class="blog-card"
+        @click="openDoc(card)"
+      >
+        <div class="card-cover" :style="coverStyle(card)">
           <span class="card-type">{{ card.sourceType === 'GUIDE' ? '攻略' : '游记' }}</span>
         </div>
         <div class="card-info">
           <div class="card-title">{{ card.title }}</div>
-          <div v-if="isPlan(card)" class="card-meta plan-meta">{{ card.summary }}</div>
-          <div v-else class="card-meta">
+          <div class="card-meta">
             <span v-if="card.authorName" class="card-author">{{ card.authorName }}</span>
             <span v-if="card.liked" class="card-liked">{{ card.liked }} 赞</span>
           </div>
         </div>
-        <el-icon v-if="isPlan(card)" class="plan-arrow"><ArrowRight /></el-icon>
       </div>
     </div>
   </div>
@@ -35,8 +49,8 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 // cards: [{ sourceType, sourceId, title, cover, authorName, liked, summary, score }]
-// sourceType=PLAN 时 sourceId 是旅行计划 id，副标题由后端拼进 summary；
-// 其它类型（BLOG/GUIDE）是参考游记与攻略。约定：cards 为空时整块不渲染
+// sourceType=PLAN 是本次对话产出的旅行计划，其余（BLOG/GUIDE）是检索到的参考游记与攻略。
+// 两者分成独立分区展示：计划是"你的东西"，游记是"参考资料"，混在一个条里会让用户分不清哪个能点进自己的计划
 const PLAN_TYPE = 'PLAN'
 
 const props = defineProps({
@@ -49,29 +63,19 @@ function isPlan(card) {
   return card.sourceType === PLAN_TYPE
 }
 
-// 计划是本轮对话的直接产物，排在参考游记前面
-const orderedCards = computed(() => {
-  return [...props.cards].sort((a, b) => Number(!isPlan(a)) - Number(!isPlan(b)))
-})
-
-const stripTitle = computed(() => {
-  const hasPlan = props.cards.some(isPlan)
-  const hasDoc = props.cards.some(card => !isPlan(card))
-  if (hasPlan && hasDoc) return '旅行计划与相关游记'
-  if (hasPlan) return '旅行计划'
-  return '参考游记与攻略'
-})
+const planCards = computed(() => props.cards.filter(isPlan))
+const docCards = computed(() => props.cards.filter(card => !isPlan(card)))
 
 function coverStyle(card) {
   if (!card.cover) return {}
   return { backgroundImage: 'url(' + card.cover + ')' }
 }
 
-function open(card) {
-  if (isPlan(card)) {
-    router.push({ path: '/list-detail', query: { id: card.sourceId } })
-    return
-  }
+function openPlan(card) {
+  router.push({ path: '/list-detail', query: { id: card.sourceId } })
+}
+
+function openDoc(card) {
   if (card.sourceType === 'GUIDE') {
     router.push({ path: '/gonglue-detail', query: { id: card.sourceId } })
     return
@@ -88,6 +92,12 @@ function open(card) {
   border-top: 1px solid #edf2f7;
   /* 气泡正文是 1.85 行高，卡片区要收回常规行高，否则标题与标签会被撑松 */
   line-height: 1.5;
+}
+/* 两个分区连着出现时只保留第一条分隔线，否则中间夹一道多余横线 */
+.blog-card-strip + .blog-card-strip {
+  margin-top: 10px;
+  padding-top: 0;
+  border-top: none;
 }
 .strip-title {
   font-size: 12px;
