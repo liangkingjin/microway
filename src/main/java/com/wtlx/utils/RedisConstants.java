@@ -79,6 +79,11 @@ public class RedisConstants {
      */
     public static final Long FEED_BLOG_BATCH_TTL = 600L;
 
+    /**
+     * 游记批次 ZSet 成员格式：游记ID + 分隔符 + 创建时间戳
+     */
+    public static final String FEED_BLOG_MEMBER_SEPARATOR = ":";
+
     public static final String FEED_KEY = "feed:";
     public static final String SHOP_GEO_KEY = "shop:geo:";
     public static final String USER_SIGN_KEY = "sign:";

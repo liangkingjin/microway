@@ -19,6 +19,7 @@ import com.wtlx.service.ILikedService;
 import com.wtlx.service.IFollowService;
 import com.wtlx.service.ITbBlogCommentsService;
 import com.wtlx.service.IUserService;
+import com.wtlx.utils.FeedConstants;
 import com.wtlx.utils.RedisConstants;
 import com.wtlx.utils.SystemConstants;
 import com.wtlx.utils.UserHolder;
@@ -125,7 +126,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
      */
     @Override
     public Result queryHotBlogByCursor(String cursor, Integer pageSize) {
-        int size = (pageSize == null || pageSize <= 0) ? 10 : Math.min(pageSize, 50);
+        int size = (pageSize == null || pageSize <= 0) ? 10 : Math.min(pageSize, FeedConstants.BLOG_MAX_PAGE_SIZE);
         UserDTO loginUser = UserHolder.getUser();
         IBlogFeedSnapshotService.FeedPage page = feedSnapshotService.page(
                 loginUser == null ? null : loginUser.getId(), cursor, size);

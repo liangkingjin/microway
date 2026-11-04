@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.wtlx.domain.entity.Blog;
 import com.wtlx.repository.mapper.BlogMapper;
 import com.wtlx.service.IBlogFeedSnapshotService;
+import com.wtlx.utils.FeedConstants;
 import com.wtlx.utils.RedisConstants;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -36,29 +37,6 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
 
-    /**
-     * 每批召回条数
-     */
-    private static final int BATCH_SIZE = 100;
-
-    private static final int MAX_PAGE_SIZE = 50;
-
-    private static final String MEMBER_SEPARATOR = ":";
-
-    /**
-     * 粗排权重：互动 0.55、新鲜度 0.35、首图质量 0.10
-     */
-    private static final double WEIGHT_INTERACTION = 0.55D;
-
-    private static final double WEIGHT_FRESHNESS = 0.35D;
-
-    private static final double WEIGHT_IMAGE = 0.10D;
-
-    /**
-     * 新鲜度半衰期，10 天
-     */
-    private static final double FRESHNESS_HALF_LIFE_HOURS = 240D;
-
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
@@ -67,9 +45,9 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
 
     @Override
     public FeedPage page(Long userId, String cursor, int pageSize) {
-        int size = pageSize <= 0 ? 10 : Math.min(pageSize, MAX_PAGE_SIZE);
+        int size = pageSize <= 0 ? 10 : Math.min(pageSize, FeedConstants.BLOG_MAX_PAGE_SIZE);
         Cursor c = Cursor.parse(cursor);
-        if (c == null || c.offset >= BATCH_SIZE) {
+        if (c == null || c.offset >= FeedConstants.BLOG_BATCH_SIZE) {
             c = Cursor.first();
         }
 
@@ -84,7 +62,7 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
 
     private FeedPage readFromCache(Long userId, Cursor c, int size) {
         String key = RedisConstants.FEED_BLOG_BATCH_KEY + (userId == null ? 0 : userId)
-                + MEMBER_SEPARATOR + c.ts + "_" + c.id;
+                + RedisConstants.FEED_BLOG_MEMBER_SEPARATOR + c.ts + "_" + c.id;
 
         if (!Boolean.TRUE.equals(stringRedisTemplate.hasKey(key))) {
             buildBatch(key, c);
@@ -105,7 +83,7 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
             hasMore = true;
         } else if (total > 0) {
             // 本批已读完：用本批最早的一条作为下一批查询起点。
-            // 不用 total==BATCH_SIZE 判断，避免批次内游记被删后整条流提前结束。
+            // 不用 total==FeedConstants.BLOG_BATCH_SIZE 判断，避免批次内游记被删后整条流提前结束。
             Cursor tail = minCursor(key);
             nextCursor = tail == null ? null : tail.encode();
             hasMore = tail != null;
@@ -121,7 +99,7 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
      * 召回一批并写入缓存。整批一次 ZADD，读写两侧都只会看到完整的一批。
      */
     private void buildBatch(String key, Cursor c) {
-        List<Blog> rows = queryBatch(c, BATCH_SIZE);
+        List<Blog> rows = queryBatch(c, FeedConstants.BLOG_BATCH_SIZE);
         if (rows.isEmpty()) {
             return;
         }
@@ -141,7 +119,7 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
         for (int i = 0; i < ranked.size(); i++) {
             Blog blog = ranked.get(i).blog();
             // score 用位次而非粗排分，避免同分导致批内顺序不稳定
-            tuples.add(ZSetOperations.TypedTuple.of(toMember(blog), (double) (BATCH_SIZE - i)));
+            tuples.add(ZSetOperations.TypedTuple.of(toMember(blog), (double) (FeedConstants.BLOG_BATCH_SIZE - i)));
         }
         stringRedisTemplate.opsForZSet().add(key, tuples);
         stringRedisTemplate.expire(key, RedisConstants.FEED_BLOG_BATCH_TTL, TimeUnit.SECONDS);
@@ -177,7 +155,7 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
         long minTs = Long.MAX_VALUE;
         long minId = Long.MAX_VALUE;
         for (String member : members) {
-            int sep = member.indexOf(MEMBER_SEPARATOR);
+            int sep = member.indexOf(RedisConstants.FEED_BLOG_MEMBER_SEPARATOR);
             if (sep <= 0) {
                 continue;
             }
@@ -204,12 +182,12 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
         if (blog.getCreateTime() != null) {
             ageHours = Math.max(0D, Duration.between(blog.getCreateTime(), LocalDateTime.now()).toMinutes() / 60D);
         }
-        double freshness = Math.exp(-ageHours / FRESHNESS_HALF_LIFE_HOURS);
+        double freshness = Math.exp(-ageHours / FeedConstants.BLOG_FRESHNESS_HALF_LIFE_HOURS);
 
         int images = StrUtil.isBlank(blog.getImages()) ? 0 : blog.getImages().split(",").length;
         double imageRatio = Math.min(images, 9) / 9D;
 
-        return WEIGHT_INTERACTION * normalized + WEIGHT_FRESHNESS * freshness + WEIGHT_IMAGE * imageRatio;
+        return FeedConstants.BLOG_WEIGHT_INTERACTION * normalized + FeedConstants.BLOG_WEIGHT_FRESHNESS * freshness + FeedConstants.BLOG_WEIGHT_IMAGE * imageRatio;
     }
 
     private double interaction(Blog blog) {
@@ -219,11 +197,11 @@ public class BlogFeedSnapshotServiceImpl implements IBlogFeedSnapshotService {
     }
 
     private String toMember(Blog blog) {
-        return blog.getId() + MEMBER_SEPARATOR + toMillis(blog.getCreateTime());
+        return blog.getId() + RedisConstants.FEED_BLOG_MEMBER_SEPARATOR + toMillis(blog.getCreateTime());
     }
 
     private Long parseId(String member) {
-        int sep = member.indexOf(MEMBER_SEPARATOR);
+        int sep = member.indexOf(RedisConstants.FEED_BLOG_MEMBER_SEPARATOR);
         return Long.valueOf(sep > 0 ? member.substring(0, sep) : member);
     }
 
