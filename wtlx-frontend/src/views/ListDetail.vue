@@ -48,7 +48,7 @@
         </div>
 
         <div class="bill-list">
-          <div v-for="bill in bills" :key="bill.id" class="list-item">
+          <div v-for="bill in bills" :key="bill.id" class="list-item" @click="showBillActions(bill)">
             <div class="item-left">
               <div class="item-icon">
                 <el-icon><component :is="bill.icon" /></el-icon>
@@ -65,7 +65,7 @@
 
       <template v-if="activeTab === 'luggage'">
         <div class="luggage-list">
-          <div v-for="item in luggageList" :key="item.id" class="list-item">
+          <div v-for="item in luggageList" :key="item.id" class="list-item" @click="showLuggageActions(item)">
             <div class="item-left">
               <div class="item-icon">
                 <el-icon><component :is="item.icon" /></el-icon>
@@ -125,15 +125,15 @@
       </template>
     </el-dialog>
 
-    <!-- 添加加号按钮（仅在账单和行李清单 tab 时显示） -->
-    <div class="add-button" v-if="activeTab !== 'itinerary'" @click="showAddDialog">
+    <!-- 添加加号按钮（仅在账单和行李清单 tab 时显示；操作菜单/弹窗打开时隐藏，避免压住菜单） -->
+    <div class="add-button" v-if="activeTab !== 'itinerary' && !showActions && !showBillDialog && !showLuggageDialog" @click="showAddDialog">
       <el-icon><Plus /></el-icon>
     </div>
 
-    <!-- 账单添加弹窗 -->
+    <!-- 账单添加/编辑弹窗 -->
     <div class="bill-dialog" v-if="showBillDialog">
       <div class="bill-header">
-        <div class="bill-title">添加账单</div>
+        <div class="bill-title">{{ isEditingBill ? '编辑账单' : '添加账单' }}</div>
         <div class="bill-close-btn" @click="showBillDialog = false">
           <el-icon><Close /></el-icon>
         </div>
@@ -155,10 +155,10 @@
       </div>
     </div>
 
-    <!-- 行李清单弹窗 -->
+    <!-- 行李清单添加/编辑弹窗 -->
     <div class="luggage-dialog" v-if="showLuggageDialog">
       <div class="luggage-dialog-header">
-        <div class="luggage-dialog-title">添加物品</div>
+        <div class="luggage-dialog-title">{{ isEditingLuggage ? '编辑物品' : '添加物品' }}</div>
         <div class="luggage-close-btn" @click="showLuggageDialog = false">
           <el-icon><Close /></el-icon>
         </div>
@@ -168,6 +168,19 @@
              placeholder="请输入物品名称"
              class="luggage-input"
              @keyup.enter="saveLuggage">
+      <div class="luggage-field">
+        <span class="luggage-label">数量</span>
+        <input type="number"
+               v-model.number="luggageQuantity"
+               min="1"
+               max="999"
+               step="1"
+               class="luggage-input luggage-input--inline">
+      </div>
+      <div class="luggage-field">
+        <span class="luggage-label">已打包</span>
+        <el-switch v-model="luggagePacked" />
+      </div>
       <button class="luggage-confirm-btn" @click="saveLuggage">确定</button>
     </div>
   </div>
@@ -202,6 +215,16 @@ const bills = ref([])
 const luggageList = ref([])
 const showLuggageDialog = ref(false)
 const luggageName = ref('')
+const luggageQuantity = ref(1)
+const luggagePacked = ref(false)
+// 操作菜单的归属：行程/账单/行李共用同一个底部菜单与编辑删除入口
+const actionType = ref('itinerary')
+const selectedBill = ref(null)
+const selectedLuggage = ref(null)
+const isEditingBill = ref(false)
+const editingBillId = ref(null)
+const isEditingLuggage = ref(false)
+const editingLuggageId = ref(null)
 
 const expenseTypes = {
   accommodation: { label: '住宿', icon: 'House' },
@@ -349,12 +372,35 @@ function addItinerary(date) {
 }
 
 function showItemActions(date, item) {
+  actionType.value = 'itinerary'
   selectedDate.value = date
   selectedItem.value = item
   showActions.value = true
 }
 
+/** 账单条目：复用行程的操作菜单，交互与行程保持一致 */
+function showBillActions(bill) {
+  actionType.value = 'bill'
+  selectedBill.value = bill
+  showActions.value = true
+}
+
+/** 行李条目：复用行程的操作菜单，交互与行程保持一致 */
+function showLuggageActions(item) {
+  actionType.value = 'luggage'
+  selectedLuggage.value = item
+  showActions.value = true
+}
+
 function editItem() {
+  if (actionType.value === 'bill') {
+    editBill()
+    return
+  }
+  if (actionType.value === 'luggage') {
+    editLuggage()
+    return
+  }
   isEditing.value = true
   currentItem.id = selectedItem.value.id
   currentItem.content = selectedItem.value.content
@@ -365,6 +411,14 @@ function editItem() {
 }
 
 function deleteItem() {
+  if (actionType.value === 'bill') {
+    deleteBill()
+    return
+  }
+  if (actionType.value === 'luggage') {
+    deleteLuggage()
+    return
+  }
   request.delete(`/itinerary-items/${selectedItem.value.id}`)
     .then(() => {
       const day = days.value.find(d => d.date === selectedDate.value)
@@ -449,13 +503,72 @@ function closeActions() {
 
 function showAddDialog() {
   if (activeTab.value === 'expenses') {
+    isEditingBill.value = false
+    editingBillId.value = null
     showBillDialog.value = true
     amount.value = ''
     billRemark.value = ''
   } else if (activeTab.value === 'luggage') {
+    isEditingLuggage.value = false
+    editingLuggageId.value = null
     showLuggageDialog.value = true
     luggageName.value = ''
+    luggageQuantity.value = 1
+    luggagePacked.value = false
   }
+}
+
+/** 编辑账单：回填备注与金额，日期沿用记录原值（后端未提交的字段保持不变） */
+function editBill() {
+  const bill = selectedBill.value
+  isEditingBill.value = true
+  editingBillId.value = bill.id
+  billRemark.value = bill.remark || (bill.title === '未命名支出' ? '' : bill.title)
+  amount.value = bill.amount != null ? String(bill.amount) : ''
+  showActions.value = false
+  showBillDialog.value = true
+}
+
+/** 编辑行李：回填名称、数量与打包状态 */
+function editLuggage() {
+  const item = selectedLuggage.value
+  isEditingLuggage.value = true
+  editingLuggageId.value = item.id
+  luggageName.value = item.name
+  luggageQuantity.value = item.quantity || 1
+  luggagePacked.value = !!item.isPacked
+  showActions.value = false
+  showLuggageDialog.value = true
+}
+
+/** 删除账单：删除后重新拉取列表，总支出由列表重新汇总 */
+function deleteBill() {
+  const bill = selectedBill.value
+  showActions.value = false
+  request.delete(`/expenses/${bill.id}`)
+    .then(() => {
+      ElMessage.success('删除成功')
+      loadExpenses(planDetail.value.id)
+    })
+    .catch(error => {
+      console.error('删除账单失败:', error)
+      ElMessage.error('删除账单失败')
+    })
+}
+
+/** 删除行李 */
+function deleteLuggage() {
+  const item = selectedLuggage.value
+  showActions.value = false
+  request.delete(`/luggage-items/${item.id}`)
+    .then(() => {
+      ElMessage.success('删除成功')
+      loadLuggage(planDetail.value.id)
+    })
+    .catch(error => {
+      console.error('删除行李失败:', error)
+      ElMessage.error('删除行李失败')
+    })
 }
 
 function inputNumber(key) {
@@ -488,9 +601,16 @@ function inputNumber(key) {
   amount.value += key
 }
 
+/** 账单保存：新增走 POST，编辑走 PUT，两条路径共用同一份校验与回显逻辑 */
 function saveBill() {
   if (!amount.value) {
     ElMessage.warning('请输入金额')
+    return
+  }
+
+  const parsedAmount = parseFloat(amount.value)
+  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    ElMessage.warning('请输入正确的金额')
     return
   }
 
@@ -499,58 +619,82 @@ function saveBill() {
     return
   }
 
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  const formattedDate = `${year}-${month}-${day}`
-
+  const isEditing = isEditingBill.value
   const expenseData = {
-    planId: planDetail.value.id,
     title: billRemark.value || '未命名支出',
-    amount: parseFloat(amount.value),
-    date: formattedDate,
+    amount: parsedAmount,
     remark: billRemark.value
   }
 
-  request.post(`/expenses`, expenseData)
+  const submit = isEditing
+    ? request.put(`/expenses/${editingBillId.value}`, expenseData)
+    : request.post(`/expenses`, { ...expenseData, planId: planDetail.value.id, date: formatFullDate(new Date()) })
+
+  submit
     .then(() => {
-      ElMessage.success('添加成功')
+      ElMessage.success(isEditing ? '编辑成功' : '添加成功')
       showBillDialog.value = false
       amount.value = ''
       billRemark.value = ''
       loadExpenses(planDetail.value.id)
     })
     .catch(error => {
-      console.error('添加账单失败:', error)
-      ElMessage.error('添加账单失败')
+      console.error(isEditing ? '编辑账单失败:' : '添加账单失败:', error)
+      ElMessage.error(isEditing ? '编辑账单失败' : '添加账单失败')
     })
 }
 
+/** 行李保存：新增走 POST，编辑走 PUT，字段与校验完全相同 */
 function saveLuggage() {
-  if (!luggageName.value.trim()) {
+  const name = (luggageName.value || '').trim()
+  if (!name) {
     ElMessage.warning('请输入物品名称')
     return
   }
 
-  const luggageData = {
-    planId: planDetail.value.id,
-    name: luggageName.value,
-    quantity: 1,
-    isPacked: false
+  const quantity = Number(luggageQuantity.value)
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    ElMessage.warning('请输入正确的数量')
+    return
   }
 
-  request.post(`/luggage-items`, luggageData)
+  if (!planDetail.value || !planDetail.value.id) {
+    ElMessage.error('无法获取计划ID')
+    return
+  }
+
+  const isEditing = isEditingLuggage.value
+  const luggageData = {
+    name,
+    quantity,
+    isPacked: luggagePacked.value
+  }
+
+  const submit = isEditing
+    ? request.put(`/luggage-items/${editingLuggageId.value}`, luggageData)
+    : request.post(`/luggage-items`, { ...luggageData, planId: planDetail.value.id })
+
+  submit
     .then(() => {
-      ElMessage.success('添加成功')
+      ElMessage.success(isEditing ? '编辑成功' : '添加成功')
       showLuggageDialog.value = false
       luggageName.value = ''
+      luggageQuantity.value = 1
+      luggagePacked.value = false
       loadLuggage(planDetail.value.id)
     })
     .catch(error => {
-      console.error('添加行李失败:', error)
-      ElMessage.error('添加行李失败')
+      console.error(isEditing ? '编辑行李失败:' : '添加行李失败:', error)
+      ElMessage.error(isEditing ? '编辑行李失败' : '添加行李失败')
     })
+}
+
+/** 后端 date 列为 LocalDate，需要 YYYY-MM-DD */
+function formatFullDate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function formatTime(timeString) {
@@ -813,6 +957,7 @@ function formatTime(timeString) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
 }
 .item-left {
   display: flex;
@@ -927,6 +1072,22 @@ function formatTime(timeString) {
   font-size: 14px;
   margin-bottom: 16px;
   box-sizing: border-box;
+}
+/* 与名称输入框同一套外观，仅在"数量"行内收窄、去掉多余下间距 */
+.luggage-input--inline {
+  width: 120px;
+  margin-bottom: 0;
+  text-align: right;
+}
+.luggage-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.luggage-label {
+  font-size: 14px;
+  color: #606266;
 }
 .luggage-confirm-btn {
   width: 100%;

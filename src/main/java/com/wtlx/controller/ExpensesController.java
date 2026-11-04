@@ -37,4 +37,27 @@ public class ExpensesController {
     public Result addExpenses(@RequestBody Expenses expenses) {
         return expensesService.addExpenses(expenses);
     }
+
+    /**
+     * 修改费用
+     * @param id
+     * @param expenses
+     * @return
+     */
+    @PutMapping("/{id}")
+    @ApiOperation("修改费用")
+    public Result updateExpenses(@PathVariable Integer id, @RequestBody Expenses expenses) {
+        return expensesService.updateExpenses(id, expenses);
+    }
+
+    /**
+     * 删除费用
+     * @param id
+     * @return
+     */
+    @DeleteMapping("/{id}")
+    @ApiOperation("删除费用")
+    public Result deleteExpenses(@PathVariable Integer id) {
+        return expensesService.deleteExpenses(id);
+    }
 }

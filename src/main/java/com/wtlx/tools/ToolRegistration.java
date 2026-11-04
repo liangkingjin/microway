@@ -2,6 +2,10 @@ package com.wtlx.tools;
 
 import com.wtlx.infrastructure.memory.retrieval.MemoryRecallTool;
 import com.wtlx.infrastructure.rag.adapter.RagRetrievalTool;
+import com.wtlx.tools.travel.ExpenseTool;
+import com.wtlx.tools.travel.ItineraryItemTool;
+import com.wtlx.tools.travel.LuggageItemTool;
+import com.wtlx.tools.travel.TravelPlanTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
@@ -30,12 +34,20 @@ public class ToolRegistration {
      * @param mcpToolCallbackProvider MCP 工具回调提供者（由 Spring AI MCP 自动配置）
      * @param ragRetrievalTool        RAG 知识库检索工具（Spring Bean）
      * @param memoryRecallTool        用户长期记忆召回工具（Spring Bean）
+     * @param travelPlanTool          旅行计划主档工具（创建/查询/修改/删除计划）
+     * @param itineraryItemTool       旅行计划行程工具（批量添加/修改/删除行程）
+     * @param expenseTool             旅行计划账单工具（批量记账/修改/删除）
+     * @param luggageItemTool         旅行计划行李工具（批量添加/修改/删除行李）
      * @return 合并后的工具回调数组
      */
     @Bean
     public ToolCallback[] allTools(ToolCallbackProvider mcpToolCallbackProvider,
                                    RagRetrievalTool ragRetrievalTool,
-                                   MemoryRecallTool memoryRecallTool) {
+                                   MemoryRecallTool memoryRecallTool,
+                                   TravelPlanTool travelPlanTool,
+                                   ItineraryItemTool itineraryItemTool,
+                                   ExpenseTool expenseTool,
+                                   LuggageItemTool luggageItemTool) {
         log.info("开始注册工具集");
 
         // 1. 收集本地工具（均为 Spring Bean）
@@ -55,7 +67,12 @@ public class ToolRegistration {
                 ragRetrievalTool,
                 // 长期记忆的"被动召回"入口：与拦截器的"主动注入"互补，
                 // 让模型在需要确认用户偏好时能自己发起检索
-                memoryRecallTool
+                memoryRecallTool,
+                // 旅行计划读写：让助手能把对话里的方案直接落成可编辑的计划、行程、账单与清单
+                travelPlanTool,
+                itineraryItemTool,
+                expenseTool,
+                luggageItemTool
         );
 
         // 2. 获取 MCP 工具
