@@ -52,7 +52,8 @@ public class LuggageItemTool {
             + "每项包含名称、数量与是否已打包。")
     public String addLuggageItems(
             @ToolParam(description = "旅行计划ID") Integer planId,
-            @ToolParam(description = "行李物品数组") List<LuggageItemInput> items,
+            @ToolParam(description = "行李物品 JSON 数组字符串，"
+                    + "例如 [{\"name\":\"充电宝\",\"quantity\":1,\"isPacked\":false}]") String items,
             ToolContext toolContext) {
 
         Long userId = support.resolveUserId(toolContext);
@@ -62,14 +63,21 @@ public class LuggageItemTool {
         if (support.ownedPlan(planId, userId) == null) {
             return support.planNotFoundMessage(planId);
         }
-        if (items == null || items.isEmpty()) {
+
+        List<LuggageItemInput> inputs;
+        try {
+            inputs = support.parseItems(items, LuggageItemInput.class, "行李物品");
+        } catch (IllegalArgumentException e) {
+            return "添加失败：" + e.getMessage();
+        }
+        if (inputs.isEmpty()) {
             return "添加失败：没有提供任何物品。";
         }
 
         List<String> failures = new ArrayList<>();
         int saved = 0;
-        for (int i = 0; i < items.size(); i++) {
-            LuggageItemInput input = items.get(i);
+        for (int i = 0; i < inputs.size(); i++) {
+            LuggageItemInput input = inputs.get(i);
             String label = "第 " + (i + 1) + " 条";
             if (input == null || !StringUtils.hasText(input.getName())) {
                 failures.add(label + "：物品名称为空");

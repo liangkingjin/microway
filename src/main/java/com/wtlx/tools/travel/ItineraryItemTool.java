@@ -55,7 +55,8 @@ public class ItineraryItemTool {
             + "每个条目包含日期、时间和内容；重复调用会追加而不是覆盖，补录漏掉的日程时才再次调用。")
     public String addItineraryItems(
             @ToolParam(description = "旅行计划ID") Integer planId,
-            @ToolParam(description = "行程条目数组，按时间顺序排列") List<ItineraryItemInput> items,
+            @ToolParam(description = "行程条目 JSON 数组字符串，按时间顺序排列，"
+                    + "例如 [{\"date\":\"2026-05-01\",\"time\":\"09:00\",\"content\":\"抵达昆明\"}]") String items,
             ToolContext toolContext) {
 
         Long userId = support.resolveUserId(toolContext);
@@ -65,14 +66,21 @@ public class ItineraryItemTool {
         if (support.ownedPlan(planId, userId) == null) {
             return support.planNotFoundMessage(planId);
         }
-        if (items == null || items.isEmpty()) {
+
+        List<ItineraryItemInput> inputs;
+        try {
+            inputs = support.parseItems(items, ItineraryItemInput.class, "行程条目");
+        } catch (IllegalArgumentException e) {
+            return "添加失败：" + e.getMessage();
+        }
+        if (inputs.isEmpty()) {
             return "添加失败：没有提供任何行程条目。";
         }
 
         List<String> failures = new ArrayList<>();
         int saved = 0;
-        for (int i = 0; i < items.size(); i++) {
-            ItineraryItemInput input = items.get(i);
+        for (int i = 0; i < inputs.size(); i++) {
+            ItineraryItemInput input = inputs.get(i);
             String label = "第 " + (i + 1) + " 条";
             if (input == null || !StringUtils.hasText(input.getContent())) {
                 failures.add(label + "：行程内容为空");

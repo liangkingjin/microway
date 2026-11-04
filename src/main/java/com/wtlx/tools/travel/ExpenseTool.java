@@ -56,7 +56,8 @@ public class ExpenseTool {
             + "每条包含标题与金额，日期不传默认今天。")
     public String addExpenses(
             @ToolParam(description = "旅行计划ID") Integer planId,
-            @ToolParam(description = "账单数组") List<ExpenseInput> items,
+            @ToolParam(description = "账单 JSON 数组字符串，"
+                    + "例如 [{\"title\":\"往返机票\",\"amount\":1500,\"date\":\"2026-05-01\"}]") String items,
             ToolContext toolContext) {
 
         Long userId = support.resolveUserId(toolContext);
@@ -66,15 +67,22 @@ public class ExpenseTool {
         if (support.ownedPlan(planId, userId) == null) {
             return support.planNotFoundMessage(planId);
         }
-        if (items == null || items.isEmpty()) {
+
+        List<ExpenseInput> inputs;
+        try {
+            inputs = support.parseItems(items, ExpenseInput.class, "账目");
+        } catch (IllegalArgumentException e) {
+            return "添加失败：" + e.getMessage();
+        }
+        if (inputs.isEmpty()) {
             return "添加失败：没有提供任何账目。";
         }
 
         List<String> failures = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
         int saved = 0;
-        for (int i = 0; i < items.size(); i++) {
-            ExpenseInput input = items.get(i);
+        for (int i = 0; i < inputs.size(); i++) {
+            ExpenseInput input = inputs.get(i);
             String label = "第 " + (i + 1) + " 条";
             if (input == null) {
                 failures.add(label + "：内容为空");

@@ -1,6 +1,7 @@
 package com.wtlx.tools.travel;
 
 import com.alibaba.cloud.ai.graph.agent.tools.ToolContextHelper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wtlx.domain.entity.Expenses;
 import com.wtlx.domain.entity.ItineraryItems;
 import com.wtlx.domain.entity.LuggageItems;
@@ -64,6 +65,9 @@ public class TravelPlanToolSupport {
      * 卡片副标题里的日期格式：卡片一行只放得下月日
      */
     private static final DateTimeFormatter CARD_DATE = DateTimeFormatter.ofPattern("M.dd");
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Resource
     private ITravelPlansService travelPlansService;
@@ -276,6 +280,33 @@ public class TravelPlanToolSupport {
         return expensesList.stream()
                 .map(expense -> expense.getAmount() == null ? BigDecimal.ZERO : expense.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 解析模型给的批量条目。
+     * <p>
+     * 参数声明成 String 而不是 {@code List<DTO>}，是因为模型偶尔会把数组"字符串化"
+     * （收到的值是 {@code "[{...}]"} 这一整个字符串）。那种情况框架层的参数反序列化会直接抛异常，
+     * 整轮对话都失败，用户只看到"生成失败"；收成字符串自己解析，错误就被限制在本工具内，
+     * 可以返回可读提示让模型重试。
+     *
+     * @param raw  模型传入的 JSON 数组字符串
+     * @param type 条目类型
+     * @param what 条目中文名，用于错误提示
+     * @return 解析结果；空输入返回空列表
+     * @throws IllegalArgumentException 不是合法 JSON 数组
+     */
+    public <T> List<T> parseItems(String raw, Class<T> type, String what) {
+        if (!StringUtils.hasText(raw)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(raw.trim(),
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, type));
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                    what + " 必须是 JSON 数组，例如 [{\"date\":\"2026-05-01\",\"time\":\"09:00\",\"content\":\"抵达昆明\"}]");
+        }
     }
 
     /**
