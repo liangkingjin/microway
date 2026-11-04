@@ -25,10 +25,8 @@ const props = defineProps({
 
 const router = useRouter()
 const ROUTE_MAP = {
-  0: '/video-edit',
   1: '/index',
   2: '/map',
-  3: '/video',
   4: '/info'
 }
 function toPage(i) {

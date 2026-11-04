@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     vue({
       template: {
-        // /imgs/** 与 /video/** 是"运行时资源"：dev 走下面的 proxy 由后端提供，生产由 nginx 直出，
+        // /imgs/** 是"运行时资源"：dev 走下面的 proxy 由后端提供，生产由 nginx 直出，
         // 它们不是可打包的模块。而 @vitejs/plugin-vue 默认 includeAbsolute: true，会把模板里
         // 静态的 <img src="/imgs/xxx.png"> 改写成 `import _imports_0 from "/imgs/xxx.png?import"`；
         // 该请求会被 proxy 转给后端，拿到的是 Content-Type: image/png，
@@ -28,10 +28,9 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
-      // 上传落盘的图片/视频：与后端静态映射保持一致（后端 MvcConfig 已映射 /imgs/**、/video/**）
-      // 开发环境不启动 nginx 时也能预览/播放，生产仍由 nginx 直出
-      '/imgs': { target: 'http://localhost:9528', changeOrigin: true },
-      '/video': { target: 'http://localhost:9528', changeOrigin: true }
+      // 上传落盘的图片：与后端静态映射保持一致（后端 MvcConfig 已映射 /imgs/**）
+      // 开发环境不启动 nginx 时也能预览，生产仍由 nginx 直出
+      '/imgs': { target: 'http://localhost:9528', changeOrigin: true }
     }
   },
   build: {
