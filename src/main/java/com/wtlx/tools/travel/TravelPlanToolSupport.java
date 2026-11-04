@@ -5,7 +5,9 @@ import com.wtlx.domain.entity.Expenses;
 import com.wtlx.domain.entity.ItineraryItems;
 import com.wtlx.domain.entity.LuggageItems;
 import com.wtlx.domain.entity.TravelPlans;
+import com.wtlx.domain.entity.dto.ai.TripCardVO;
 import com.wtlx.infrastructure.memory.support.MemoryConstants;
+import com.wtlx.infrastructure.rag.generation.CardSink;
 import com.wtlx.service.IExpensesService;
 import com.wtlx.service.IItineraryItemsService;
 import com.wtlx.service.ILuggageItemsService;
@@ -48,10 +50,20 @@ public class TravelPlanToolSupport {
     static final String DEFAULT_PLAN_STATUS = "待出发";
 
     /**
+     * 卡片来源类型：旅行计划。前端据此把卡片渲染成"计划卡"并跳到计划详情页
+     */
+    static final String PLAN_CARD_TYPE = "PLAN";
+
+    /**
      * 时间解析格式：{@code H} 与 {@code m} 都是可变宽度，{@code 9:00} / {@code 09:00} / {@code 9:5}
      * 都能解析——模型给出的时间写法不可控，宽进严出更省一次失败重试。
      */
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("H:m");
+
+    /**
+     * 卡片副标题里的日期格式：卡片一行只放得下月日
+     */
+    private static final DateTimeFormatter CARD_DATE = DateTimeFormatter.ofPattern("M.dd");
 
     @Resource
     private ITravelPlansService travelPlansService;
@@ -187,6 +199,73 @@ public class TravelPlanToolSupport {
         long days = ChronoUnit.DAYS.between(start, end) + 1;
         long nights = days - 1;
         return days + "天" + nights + "晚";
+    }
+
+    /**
+     * 把一份计划作为卡片推给前端。
+     * <p>
+     * 复用 RAG 卡片那条通道（{@code RunnableConfig} metadata 上的 {@link CardSink}），
+     * 因为两者的可见性要求完全一致：只在当前请求内累积、随 done 事件落库、刷新历史时能回放。
+     * 另开一套"计划卡片"通道会多出第二份落库字段与回放逻辑，收益抵不上。
+     * <p>
+     * 取不到出口（例如非对话场景直接调用工具）时静默跳过：卡片是展示增强，
+     * 不能因为推不出去就判定创建失败。
+     *
+     * @param toolContext 工具上下文
+     * @param plan        刚创建或刚被修改的计划
+     */
+    public void publishPlanCard(ToolContext toolContext, TravelPlans plan) {
+        CardSink sink = resolveCardSink(toolContext);
+        if (sink == null || plan == null || plan.getId() == null) {
+            return;
+        }
+        sink.publish(List.of(TripCardVO.builder()
+                .sourceType(PLAN_CARD_TYPE)
+                .sourceId(plan.getId().longValue())
+                .title(plan.getTitle())
+                .summary(planCardSummary(plan))
+                .build()));
+    }
+
+    /**
+     * 移除计划卡片：计划被删除后卡片若还留着，用户点进去是个空详情页
+     */
+    public void removePlanCard(ToolContext toolContext, Integer planId) {
+        CardSink sink = resolveCardSink(toolContext);
+        if (sink == null || planId == null) {
+            return;
+        }
+        sink.remove(PLAN_CARD_TYPE, planId.longValue());
+    }
+
+    /**
+     * 卡片上的副标题：日期 + 时长 + 状态，控制在卡片一行内放得下
+     */
+    private String planCardSummary(TravelPlans plan) {
+        StringBuilder sb = new StringBuilder();
+        if (plan.getStartDate() != null && plan.getEndDate() != null) {
+            sb.append(plan.getStartDate().format(CARD_DATE))
+                    .append("-")
+                    .append(plan.getEndDate().format(CARD_DATE));
+        }
+        if (StringUtils.hasText(plan.getDuration())) {
+            sb.append(sb.isEmpty() ? "" : " · ").append(plan.getDuration());
+        }
+        if (StringUtils.hasText(plan.getStatus())) {
+            sb.append(sb.isEmpty() ? "" : " · ").append(plan.getStatus());
+        }
+        return sb.toString();
+    }
+
+    private CardSink resolveCardSink(ToolContext toolContext) {
+        if (toolContext == null) {
+            return null;
+        }
+        return ToolContextHelper.getConfig(toolContext)
+                .flatMap(config -> config.metadata(CardSink.METADATA_KEY))
+                .filter(CardSink.class::isInstance)
+                .map(CardSink.class::cast)
+                .orElse(null);
     }
 
     /**

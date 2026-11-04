@@ -78,6 +78,8 @@ public class TravelPlanTool {
         if (!support.plans().save(plan)) {
             return "创建失败：数据库写入异常，请稍后重试。";
         }
+        // 顺手把计划推进当前回复的卡片区，用户不必退到「旅游清单」页才能看到
+        support.publishPlanCard(toolContext, plan);
         log.info("AI 创建旅行计划成功, userId: {}, planId: {}, title: {}", userId, plan.getId(), plan.getTitle());
         return "已创建旅行计划「" + plan.getTitle() + "」，计划ID=" + plan.getId()
                 + "，日期 " + start.format(DATE_FMT) + " 至 " + end.format(DATE_FMT)
@@ -255,6 +257,8 @@ public class TravelPlanTool {
         if (!support.plans().updateById(plan)) {
             return "修改失败：数据库写入异常，请稍后重试。";
         }
+        // 卡片上的名称/日期/状态同步刷新，避免与正文说法不一致
+        support.publishPlanCard(toolContext, plan);
         log.info("AI 修改旅行计划, userId: {}, planId: {}, changes: {}", userId, planId, changes);
         return "已修改旅行计划「" + plan.getTitle() + "」（ID=" + plan.getId() + "）："
                 + String.join("；", changes) + "。";
@@ -277,6 +281,7 @@ public class TravelPlanTool {
 
         // 复用现有级联删除（计划 + 行程 + 账单 + 行李），避免工具侧再写一份删除逻辑
         support.plans().deleteTravelPlans(planId);
+        support.removePlanCard(toolContext, planId);
         log.info("AI 删除旅行计划, userId: {}, planId: {}, title: {}", userId, planId, plan.getTitle());
         return "已删除旅行计划「" + plan.getTitle() + "」（ID=" + planId + "）及其全部行程、账单和行李。";
     }

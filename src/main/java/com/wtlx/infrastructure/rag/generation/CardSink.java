@@ -75,8 +75,11 @@ public class CardSink {
             if (existed == null) {
                 cards.put(key, card);
                 changed = true;
-            } else if (card.getScore() != null
-                    && (existed.getScore() == null || card.getScore() > existed.getScore())) {
+            } else if (card.getScore() == null) {
+                // 无 score 的卡片（旅行计划）整条覆盖：计划标题/日期可能刚被改过，必须刷新
+                cards.put(key, card);
+                changed = true;
+            } else if (existed.getScore() == null || card.getScore() > existed.getScore()) {
                 existed.setScore(card.getScore());
                 changed = true;
             }
@@ -88,6 +91,29 @@ public class CardSink {
             broadcaster.accept(snapshot());
         } catch (Exception e) {
             log.warn("卡片广播失败，本次不推送前端", e);
+        }
+    }
+
+    /**
+     * 移除一张卡片并广播剩余集合。
+     * <p>
+     * 目前只有"删除旅行计划"会用到：计划被删掉后卡片若还留着，用户点进去是个空页面。
+     *
+     * @param sourceType 来源类型
+     * @param sourceId   来源业务主键
+     */
+    public synchronized void remove(String sourceType, Long sourceId) {
+        if (sourceType == null || sourceId == null) {
+            return;
+        }
+        TripCardVO removed = cards.remove(sourceType + ":" + sourceId);
+        if (removed == null || broadcaster == null) {
+            return;
+        }
+        try {
+            broadcaster.accept(snapshot());
+        } catch (Exception e) {
+            log.warn("卡片移除广播失败，本次不推送前端", e);
         }
     }
 

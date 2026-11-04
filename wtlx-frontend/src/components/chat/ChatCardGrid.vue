@@ -1,38 +1,66 @@
 <template>
-  <div v-if="cards.length" class="blog-card-strip">
-    <div class="strip-title">参考游记与攻略</div>
+  <div v-if="orderedCards.length" class="blog-card-strip">
+    <div class="strip-title">{{ stripTitle }}</div>
     <div class="strip-body">
       <div
-        v-for="card in cards"
+        v-for="card in orderedCards"
         :key="card.sourceType + '-' + card.sourceId"
         class="blog-card"
+        :class="{ 'plan-card': isPlan(card) }"
         @click="open(card)"
       >
-        <div class="card-cover" :style="coverStyle(card)">
+        <!-- 计划没有封面图，用图标位占住同样的位置，两种卡片高度才对得齐 -->
+        <div v-if="isPlan(card)" class="card-icon">
+          <el-icon><Calendar /></el-icon>
+        </div>
+        <div v-else class="card-cover" :style="coverStyle(card)">
           <span class="card-type">{{ card.sourceType === 'GUIDE' ? '攻略' : '游记' }}</span>
         </div>
         <div class="card-info">
           <div class="card-title">{{ card.title }}</div>
-          <div class="card-meta">
+          <div v-if="isPlan(card)" class="card-meta plan-meta">{{ card.summary }}</div>
+          <div v-else class="card-meta">
             <span v-if="card.authorName" class="card-author">{{ card.authorName }}</span>
             <span v-if="card.liked" class="card-liked">{{ card.liked }} 赞</span>
           </div>
         </div>
+        <el-icon v-if="isPlan(card)" class="plan-arrow"><ArrowRight /></el-icon>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 // cards: [{ sourceType, sourceId, title, cover, authorName, liked, summary, score }]
-// 约定：未检索到相关内容时 cards 为空数组，此时整块不渲染
+// sourceType=PLAN 时 sourceId 是旅行计划 id，副标题由后端拼进 summary；
+// 其它类型（BLOG/GUIDE）是参考游记与攻略。约定：cards 为空时整块不渲染
+const PLAN_TYPE = 'PLAN'
+
 const props = defineProps({
   cards: { type: Array, default: () => [] }
 })
 
 const router = useRouter()
+
+function isPlan(card) {
+  return card.sourceType === PLAN_TYPE
+}
+
+// 计划是本轮对话的直接产物，排在参考游记前面
+const orderedCards = computed(() => {
+  return [...props.cards].sort((a, b) => Number(!isPlan(a)) - Number(!isPlan(b)))
+})
+
+const stripTitle = computed(() => {
+  const hasPlan = props.cards.some(isPlan)
+  const hasDoc = props.cards.some(card => !isPlan(card))
+  if (hasPlan && hasDoc) return '旅行计划与相关游记'
+  if (hasPlan) return '旅行计划'
+  return '参考游记与攻略'
+})
 
 function coverStyle(card) {
   if (!card.cover) return {}
@@ -40,6 +68,10 @@ function coverStyle(card) {
 }
 
 function open(card) {
+  if (isPlan(card)) {
+    router.push({ path: '/list-detail', query: { id: card.sourceId } })
+    return
+  }
   if (card.sourceType === 'GUIDE') {
     router.push({ path: '/gonglue-detail', query: { id: card.sourceId } })
     return
@@ -138,5 +170,36 @@ function open(card) {
   color: #a0aec0;
   display: flex;
   gap: 6px;
+}
+/* 计划卡：宽度略放宽，副标题是日期/时长/状态拼成的一行 */
+.plan-card {
+  width: 248px;
+  padding: 10px;
+}
+.card-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #ecf5ff;
+  color: #409eff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.plan-card .card-info {
+  flex: 1;
+}
+.plan-meta {
+  color: #909399;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-arrow {
+  flex: none;
+  color: #c0c4cc;
+  font-size: 12px;
 }
 </style>

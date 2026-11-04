@@ -66,7 +66,7 @@
                   <!-- v-html 会覆盖所在元素的子节点，正文必须单独一层，卡片才能与它同处一个气泡 -->
                   <div v-if="msg.content || (msg.cards && msg.cards.length)" class="bubble ai-bubble">
                     <div v-if="msg.content" class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
-                    <BlogCardGrid :cards="msg.cards || []" />
+                    <ChatCardGrid :cards="msg.cards || []" />
                   </div>
                   <span class="timestamp">
                     {{ formatTime(msg.time) }}
@@ -142,7 +142,7 @@ import { fetchHistory, deleteHistory, openChatStream, cancelChat } from '../api/
 import { getMe } from '../api/user'
 import { DEFAULT_AVATAR } from '../constants'
 import ThinkingPanel from '../components/chat/ThinkingPanel.vue'
-import BlogCardGrid from '../components/chat/BlogCardGrid.vue'
+import ChatCardGrid from '../components/chat/ChatCardGrid.vue'
 
 // html:false —— 模型输出不可信，禁止原始 HTML 透传（v-html 下的 XSS 面）
 // linkify:true —— 裸 URL 自动成链接；breaks:true —— 单换行视为 <br>，契合行程文本的排版习惯
@@ -648,10 +648,11 @@ function sendMessage() {
     upsertThinkingStep(parseJson(event.data))
   })
 
-  // cards：本轮关联的游记 / 攻略卡片，JSON 数组；后端未检索到相关游记时不发此事件
+  // cards：本轮关联的计划 / 游记 / 攻略卡片，JSON 数组，覆盖语义。
+  // 后端删掉计划时会广播空数组，此时必须照样清空，否则卡片残留、点进去是空详情页
   eventSource.addEventListener('cards', (event) => {
     const cards = parseJson(event.data)
-    if (!Array.isArray(cards) || cards.length === 0) return
+    if (!Array.isArray(cards)) return
     const idx = ensureStreamingMessage()
     messages.value[idx].cards = cards
   })
