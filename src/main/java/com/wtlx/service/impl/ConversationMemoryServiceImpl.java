@@ -90,14 +90,17 @@ public class ConversationMemoryServiceImpl implements ConversationMemoryService 
     }
 
     @Override
-    public void appendAndCompressIfNeeded(String conversationId, String userMessage,
-                                          String assistantReply, String assistantCardsJson) {
-        // 1. 保存用户消息
+    public void appendUserMessage(String conversationId, String userMessage) {
         saveMessage(conversationId, MessageRole.USER, userMessage, null);
-        // 2. 保存助手回复（连同检索卡片，供重新进入会话时恢复展示）
+    }
+
+    @Override
+    public void appendAssistantMessage(String conversationId, String assistantReply,
+                                       String assistantCardsJson) {
+        // 回复（连同卡片）供重新进入会话时恢复展示
         saveMessage(conversationId, MessageRole.ASSISTANT, assistantReply, assistantCardsJson);
 
-        // 3. 异步检查是否需要压缩
+        // 异步检查是否需要压缩
         CompletableFuture.runAsync(() -> doCompressIfNeeded(conversationId));
     }
 

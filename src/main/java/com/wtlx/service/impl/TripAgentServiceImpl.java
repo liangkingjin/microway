@@ -121,6 +121,10 @@ public class TripAgentServiceImpl implements TripAgentService {
 
         // 2. 登记取消句柄：取消动作 = 置标记 + dispose 掉 Flux 订阅
         AtomicBoolean cancelled = new AtomicBoolean(false);
+        // 连接是否已断开（用户切页面 / 关标签页）。断开不代表"不要这个答案"：
+        // 生成继续，结果照常落库，用户重新进入会话就能看到完整回复。
+        // 真正的"停止生成"由前端显式调 POST /ai/react/cancel 触发，与本标记无关。
+        AtomicBoolean clientGone = new AtomicBoolean(false);
         AtomicReference<Disposable> disposableRef = new AtomicReference<>();
         GenerationHandle handle = new GenerationHandle(requestId, threadId);
         handle.bindCancelAction(() -> {
@@ -133,24 +137,20 @@ public class TripAgentServiceImpl implements TripAgentService {
         generationRegistry.register(handle);
         cancelService.markActive(threadId, requestId);
 
-        // 3. 客户端断开 / 超时 = 取消
-        emitter.onCompletion(() -> cancelService.cancelLocal(requestId));
-        emitter.onError(e -> cancelService.cancelLocal(requestId));
-        emitter.onTimeout(() -> {
-            log.warn("SSE 连接超时, threadId: {}, requestId: {}", threadId, requestId);
-            cancelService.cancelLocal(requestId);
-        });
+        // 3. 连接断开 / 超时：只做标记，不取消生成
+        emitter.onCompletion(() -> markClientGone(clientGone, requestId, "连接关闭"));
+        emitter.onError(e -> markClientGone(clientGone, requestId, "连接异常"));
+        emitter.onTimeout(() -> markClientGone(clientGone, requestId, "连接超时"));
 
         // 4. 心跳：既保活，也能在没有文本产出时尽快感知断开
         ScheduledFuture<?> heartbeat = heartbeatExecutor.scheduleAtFixedRate(() -> {
-            if (cancelled.get()) {
+            if (cancelled.get() || clientGone.get()) {
                 return;
             }
             try {
                 emitter.send(SseEmitter.event().comment("ping"));
             } catch (Exception e) {
-                log.debug("SSE 心跳发送失败，判定客户端已断开, requestId: {}", requestId);
-                cancelService.cancelLocal(requestId);
+                markClientGone(clientGone, requestId, "心跳发送失败");
             }
         }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS);
 
@@ -165,6 +165,12 @@ public class TripAgentServiceImpl implements TripAgentService {
             CardSink cardSink = new CardSink(full -> sendJson(emitter, "cards", full));
             try {
                 ConversationContextHolder.setConversationId(conversationId);
+                // 用户消息先落库：即使本轮生成被取消或失败，问题本身也不该在会话里消失
+                try {
+                    memoryService.appendUserMessage(conversationId, message);
+                } catch (Exception e) {
+                    log.warn("用户消息落库失败, conversationId: {}", conversationId, e);
+                }
 
                 RunnableConfig config = RunnableConfig.builder()
                         .threadId(threadId)
@@ -193,9 +199,9 @@ public class TripAgentServiceImpl implements TripAgentService {
                     @Override
                     public void onContent(String chunk) {
                         answer.append(chunk);
-                        if (!send(emitter, "delta", chunk)) {
-                            cancelled.set(true);
-                            throw new GenerationCancelledException(requestId);
+                        // 连接已断：正文继续累加（结束后照常落库），只是不再往浏览器推
+                        if (!clientGone.get() && !send(emitter, "delta", chunk)) {
+                            markClientGone(clientGone, requestId, "正文推送失败");
                         }
                     }
                 });
@@ -282,8 +288,8 @@ public class TripAgentServiceImpl implements TripAgentService {
             } finally {
                 if (!answer.isEmpty()) {
                     // 卡片随正文一起落库，重新进入会话时才能恢复"正文 + 游记卡片"的展示
-                    memoryService.appendAndCompressIfNeeded(
-                            conversationId, message, answer.toString(), toJson(cardSink.snapshot()));
+                    memoryService.appendAssistantMessage(
+                            conversationId, answer.toString(), toJson(cardSink.snapshot()));
                 }
                 // 长期记忆抽取：一轮对话结束后的异步沉淀。
                 // 放在这里而不是模型链路里，是因为抽取要调 LLM（秒级），
@@ -297,11 +303,25 @@ public class TripAgentServiceImpl implements TripAgentService {
                 generationRegistry.unregister(requestId);
                 cancelService.clearActive(threadId, requestId);
                 heartbeat.cancel(false);
-                emitter.complete();
+                try {
+                    emitter.complete();
+                } catch (Exception e) {
+                    // 连接早已断开时 complete 会抛 IllegalStateException，属预期
+                    log.debug("SSE 已关闭，忽略 complete 异常, requestId: {}", requestId);
+                }
             }
         });
 
         return emitter;
+    }
+
+    /**
+     * 标记连接已断开：后续不再尝试推送，但生成继续，结束后照常落库
+     */
+    private void markClientGone(AtomicBoolean clientGone, String requestId, String reason) {
+        if (clientGone.compareAndSet(false, true)) {
+            log.info("SSE 连接已断开（{}），生成继续并落库, requestId: {}", reason, requestId);
+        }
     }
 
     /**
