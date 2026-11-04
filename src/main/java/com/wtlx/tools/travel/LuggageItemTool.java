@@ -94,7 +94,7 @@ public class LuggageItemTool {
 
         String summary = "已为计划ID=" + planId + " 添加 " + saved + " 件行李物品。";
         if (!failures.isEmpty()) {
-            summary += "\n以下物品未写入：" + String.join("；", failures);
+            summary += "\n以下物品未写入（已写入的请勿重复提交）：" + String.join("；", failures);
         }
         log.info("AI 批量添加行李, planId: {}, 成功 {} 件, 失败 {} 件", planId, saved, failures.size());
         return summary;

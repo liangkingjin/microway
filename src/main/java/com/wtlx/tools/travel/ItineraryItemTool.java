@@ -101,7 +101,7 @@ public class ItineraryItemTool {
 
         String summary = "已为计划ID=" + planId + " 添加 " + saved + " 条行程。";
         if (!failures.isEmpty()) {
-            summary += "\n以下条目未写入：" + String.join("；", failures);
+            summary += "\n以下条目未写入（已写入的请勿重复提交）：" + String.join("；", failures);
         }
         log.info("AI 批量添加行程, planId: {}, 成功 {} 条, 失败 {} 条", planId, saved, failures.size());
         return summary;
