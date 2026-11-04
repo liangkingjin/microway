@@ -203,7 +203,10 @@ function viewRoomDetail(room) {
     id: shop.value.id,
     name: shop.value.name,
     address: shop.value.address,
-    images: shop.value.images
+    images: shop.value.images,
+    // 详情页头部要展示酒店评分与点评数（score 为 0–50，展示时除以 10）
+    score: shop.value.score,
+    comments: shop.value.comments
   }))
   router.push('/hotel-room-detail?shopId=' + shop.value.id + '&roomId=' + room.id)
 }
