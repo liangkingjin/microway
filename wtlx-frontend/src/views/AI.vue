@@ -203,12 +203,13 @@ onMounted(() => {
 
   // 旧版单会话记录（ai_chat_id）在 loadSessions 中迁移为会话列表；无任何记录时新建
   if (currentChatId.value) {
-    loadHistory(currentChatId.value)
+    loadHistory(currentChatId.value, true)
   }
 })
 
 onBeforeUnmount(() => {
   closeEventSource()
+  clearHistoryRetry()
   discardStreamingState()
   if (messagesRef.value) {
     messagesRef.value.removeEventListener('scroll', onMessagesScroll)
@@ -344,6 +345,7 @@ function addSessionToLocal(id, title) {
 
 function createNewChat() {
   closeEventSource()
+  clearHistoryRetry()
   cancelCurrentGeneration()
   discardStreamingState()
   messages.value = []
@@ -356,6 +358,7 @@ function createNewChat() {
 
 function switchChat(chatId) {
   closeEventSource()
+  clearHistoryRetry()
   cancelCurrentGeneration()
   discardStreamingState()
   currentChatId.value = chatId
@@ -366,7 +369,33 @@ function switchChat(chatId) {
   loadHistory(chatId)
 }
 
-async function loadHistory(threadId) {
+// 生成期间离开页面后再回来，后端仍在继续生成；这时历史里只有用户提问。
+// 定时重拉几次，等助手回复落库后自动补上，省掉用户手动刷新
+let historyRetryTimer = null
+let historyRetryCount = 0
+const HISTORY_RETRY_MAX = 6
+const HISTORY_RETRY_DELAY = 4000
+
+function clearHistoryRetry() {
+  if (historyRetryTimer) {
+    clearTimeout(historyRetryTimer)
+    historyRetryTimer = null
+  }
+  historyRetryCount = 0
+}
+
+function scheduleHistoryRetry(threadId) {
+  if (historyRetryTimer || historyRetryCount >= HISTORY_RETRY_MAX) return
+  historyRetryTimer = setTimeout(() => {
+    historyRetryTimer = null
+    historyRetryCount++
+    if (currentChatId.value === threadId) {
+      loadHistory(threadId, true)
+    }
+  }, HISTORY_RETRY_DELAY)
+}
+
+async function loadHistory(threadId, allowRetry = false) {
   if (!threadId) return
   try {
     const data = await fetchHistory(threadId)
@@ -386,7 +415,17 @@ async function loadHistory(threadId) {
       cards: Array.isArray(m.cards) ? m.cards : []
     }))
     scrollToBottom(true)
+    if (allowRetry) {
+      const last = messages.value[messages.value.length - 1]
+      // 最后一条只有提问、没有回答：多半是生成中离开了，继续等回复落库
+      if (last && last.isUser) {
+        scheduleHistoryRetry(threadId)
+      } else {
+        clearHistoryRetry()
+      }
+    }
   } catch (err) {
+    clearHistoryRetry()
     console.error('加载历史记录失败:', err)
   }
 }
@@ -594,6 +633,7 @@ function stopGeneration() {
 }
 
 function sendMessage() {
+  clearHistoryRetry()
   const message = inputMessage.value.trim()
   if (!message) return
 
