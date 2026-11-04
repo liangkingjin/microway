@@ -33,8 +33,6 @@ const routes = [
   { path: '/top-detail', name: 'TopDetail', component: () => import('../views/TopDetail.vue'), meta: { title: 'TOP 详情' } },
   { path: '/travel-plan', name: 'TravelPlan', component: () => import('../views/TravelPlan.vue'), meta: { title: '行程规划' } },
   { path: '/user-agreement', name: 'UserAgreement', component: () => import('../views/UserAgreement.vue'), meta: { title: '用户服务协议', requiresAuth: false } },
-  { path: '/video', name: 'Video', component: () => import('../views/Video.vue'), meta: { title: '视频' } },
-  { path: '/video-edit', name: 'VideoEdit', component: () => import('../views/VideoEdit.vue'), meta: { title: '发布视频' } },
   { path: '/watch', name: 'Watch', component: () => import('../views/Watch.vue'), meta: { title: '视频详情' } },
   { path: '/zhaogonglue', name: 'ZhaoGonglue', component: () => import('../views/ZhaoGonglue.vue'), meta: { title: '找攻略' } },
   // 中文文件名页面 → 英文路由

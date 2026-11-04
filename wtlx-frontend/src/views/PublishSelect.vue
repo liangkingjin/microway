@@ -5,7 +5,7 @@
     <div class="publish-select-container">
       <div class="publish-header">
         <div class="publish-title">选择您要发布的内容类型</div>
-        <div class="publish-subtitle">分享您的旅行故事或精彩视频</div>
+        <div class="publish-subtitle">分享您的旅行故事</div>
       </div>
 
       <div class="publish-options">
@@ -16,19 +16,6 @@
           <div class="option-content">
             <div class="option-title">发布游记</div>
             <div class="option-desc">分享您的旅行故事、照片和体验，帮助其他旅行者发现精彩目的地</div>
-          </div>
-          <div class="option-arrow">
-            <el-icon><ArrowRight /></el-icon>
-          </div>
-        </div>
-
-        <div class="publish-option" @click="toVideoEdit">
-          <div class="option-icon">
-            <el-icon><VideoCamera /></el-icon>
-          </div>
-          <div class="option-content">
-            <div class="option-title">发布视频</div>
-            <div class="option-desc">上传您的旅行视频，展示目的地的动态美景和精彩瞬间</div>
           </div>
           <div class="option-arrow">
             <el-icon><ArrowRight /></el-icon>
@@ -47,10 +34,6 @@ const router = useRouter()
 
 function toBlogEdit() {
   router.push('/blog-edit')
-}
-
-function toVideoEdit() {
-  router.push('/video-edit')
 }
 </script>
 

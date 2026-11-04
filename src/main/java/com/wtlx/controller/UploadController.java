@@ -39,39 +39,10 @@ public class UploadController {
         }
     }
 
-    @PostMapping("/video")
-    @ApiOperation("上传视频")
-    public Result uploadVideo(@RequestParam("file") MultipartFile video) {
-        try {
-            // 获取原始文件名称
-            String originalFilename = video.getOriginalFilename();
-            // 生成新文件名
-            String fileName = createNewFileName(originalFilename);
-            // 保存文件
-            video.transferTo(new File(SystemConstants.VIDEO_UPLOAD_DIR, fileName));
-            // 返回结果
-            log.debug("视频上传成功，{}", fileName);
-            return Result.ok(fileName);
-        } catch (IOException e) {
-            throw new RuntimeException("视频上传失败", e);
-        }
-    }
-
     @GetMapping("/blog/delete")
     @ApiOperation("删除图片")
     public Result deleteBlogImg(@RequestParam("name") String filename) {
         File file = new File(SystemConstants.IMAGE_UPLOAD_DIR, filename);
-        if (file.isDirectory()) {
-            return Result.fail("错误的文件名称");
-        }
-        FileUtil.del(file);
-        return Result.ok();
-    }
-
-    @GetMapping("/video/delete")
-    @ApiOperation("删除视频")
-    public Result deleteVideo(@RequestParam("name") String filename) {
-        File file = new File(SystemConstants.VIDEO_UPLOAD_DIR, filename);
         if (file.isDirectory()) {
             return Result.fail("错误的文件名称");
         }
@@ -93,32 +64,11 @@ public class UploadController {
         int d1 = hash & 0xF;
         int d2 = (hash >> 4) & 0xF;
         // 判断目录是否存在
-        String baseDir;
-        if (isImage(suffix)) {
-            baseDir = SystemConstants.IMAGE_UPLOAD_DIR;
-        } else {
-            baseDir = SystemConstants.VIDEO_UPLOAD_DIR;
-        }
-        File dir = new File(baseDir, StrUtil.format("/{}/{}", d1, d2));
+        File dir = new File(SystemConstants.IMAGE_UPLOAD_DIR, StrUtil.format("/{}/{}", d1, d2));
         if (!dir.exists()) {
             dir.mkdirs();
         }
         // 生成文件名
         return StrUtil.format("/{}/{}/{}.{}", d1, d2, name, suffix);
-    }
-
-    /**
-     * 判断是否为图片文件
-     * @param suffix 文件后缀
-     * @return 是否为图片文件
-     */
-    private boolean isImage(String suffix) {
-        String[] imageSuffixes = {"jpg", "jpeg", "png", "gif"};
-        for (String imageSuffix : imageSuffixes) {
-            if (imageSuffix.equalsIgnoreCase(suffix)) {
-                return true;
-            }
-        }
-        return false;
     }
 }
