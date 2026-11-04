@@ -20,4 +20,19 @@ public interface ILuggageItemsService extends IService<LuggageItems> {
      * @return
      */
     Result addLuggageItems(LuggageItems luggageItems);
+
+    /**
+     * 修改行李
+     * @param id 行李id
+     * @param luggageItems 待修改内容
+     * @return
+     */
+    Result updateLuggageItems(Integer id, LuggageItems luggageItems);
+
+    /**
+     * 删除行李
+     * @param id 行李id
+     * @return
+     */
+    Result deleteLuggageItems(Integer id);
 }
