@@ -12,15 +12,10 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 旅行计划主档工具：创建、列出、查看详情、修改、删除。
@@ -90,8 +85,8 @@ public class TravelPlanTool {
                 + "。接下来可用该计划ID添加行程、账单和行李。";
     }
 
-    @Tool(description = "列出当前用户的全部旅行计划，含计划ID、名称、日期、天数、状态与总支出。"
-            + "用户问「我有哪些旅行计划」、或需要确认某个计划ID时调用。")
+    @Tool(description = "列出当前用户的全部旅行计划，含计划ID、名称、日期、天数与状态。"
+            + "用户问「我有哪些旅行计划」、或需要确认某个计划ID时调用；要看金额与明细请用 getTravelPlanDetail。")
     public String listTravelPlans(ToolContext toolContext) {
         Long userId = support.resolveUserId(toolContext);
         if (userId == null) {
@@ -160,17 +155,12 @@ public class TravelPlanTool {
             sb.append("暂无\n");
         } else {
             sb.append("共 ").append(itineraries.size()).append(" 项\n");
-            // 按日分组输出，模型转述时不必自己再做聚合
-            Map<LocalDate, List<ItineraryItems>> byDate = itineraries.stream()
-                    .filter(item -> item.getDate() != null)
-                    .collect(Collectors.groupingBy(ItineraryItems::getDate, LinkedHashMap::new, Collectors.toList()));
-            for (Map.Entry<LocalDate, List<ItineraryItems>> entry : byDate.entrySet()) {
-                sb.append("- ").append(entry.getKey().format(DATE_FMT)).append("：");
-                sb.append(entry.getValue().stream()
-                        .map(item -> (item.getTime() == null ? "时间未填" : item.getTime().toString())
-                                + " " + item.getContent() + "（ID=" + item.getId() + "）")
-                        .collect(Collectors.joining("｜")));
-                sb.append("\n");
+            // 逐条平铺，不按日分组：分组会把 date 为空的条目过滤掉，导致"共 N 项"与实际列出的行数不符
+            for (ItineraryItems item : itineraries) {
+                sb.append("- ").append(item.getDate() == null ? "日期未填" : item.getDate().format(DATE_FMT))
+                        .append(" ").append(item.getTime() == null ? "时间未填" : item.getTime())
+                        .append(" ").append(item.getContent())
+                        .append("（ID=").append(item.getId()).append("）\n");
             }
         }
 
@@ -179,7 +169,7 @@ public class TravelPlanTool {
             sb.append("暂无\n");
         } else {
             sb.append("共 ").append(expenses.size()).append(" 笔，合计 ¥")
-                    .append(support.sumAmount(expenses).setScale(2, java.math.RoundingMode.HALF_UP)).append("\n");
+                    .append(support.money(support.sumAmount(expenses))).append("\n");
             for (Expenses expense : expenses) {
                 sb.append("- ID=").append(expense.getId()).append("｜")
                         .append(expense.getTitle()).append("｜¥").append(expense.getAmount())
@@ -289,28 +279,5 @@ public class TravelPlanTool {
         support.plans().deleteTravelPlans(planId);
         log.info("AI 删除旅行计划, userId: {}, planId: {}, title: {}", userId, planId, plan.getTitle());
         return "已删除旅行计划「" + plan.getTitle() + "」（ID=" + planId + "）及其全部行程、账单和行李。";
-    }
-
-    /**
-     * 供其它工具复用的日期格式器，避免各处重复构造
-     */
-    static DateTimeFormatter dateFormatter() {
-        return DATE_FMT;
-    }
-
-    /**
-     * 账单金额的展示口径：两位小数
-     */
-    static String money(BigDecimal amount) {
-        BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
-        return value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
-    }
-
-    /**
-     * 行程排序：日期 + 时间，时间缺失的排最后（模型补录时常见）
-     */
-    static Comparator<ItineraryItems> itineraryOrder() {
-        return Comparator.comparing(ItineraryItems::getDate, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(ItineraryItems::getTime, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 }
