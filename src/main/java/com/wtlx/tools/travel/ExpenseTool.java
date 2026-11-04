@@ -113,7 +113,7 @@ public class ExpenseTool {
 
         String summary = "已为计划ID=" + planId + " 记录 " + saved + " 笔账单，合计 ¥" + support.money(total) + "。";
         if (!failures.isEmpty()) {
-            summary += "\n以下账目未写入：" + String.join("；", failures);
+            summary += "\n以下账目未写入（已写入的请勿重复提交）：" + String.join("；", failures);
         }
         log.info("AI 批量添加账单, planId: {}, 成功 {} 笔, 合计 {}, 失败 {} 笔", planId, saved, total, failures.size());
         return summary;
