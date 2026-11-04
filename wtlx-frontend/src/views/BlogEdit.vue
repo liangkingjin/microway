@@ -24,7 +24,17 @@
       <input v-model="params.title" type="text" placeholder="填写标题更容易上首页哦~">
     </div>
     <div class="blog-content">
-      <textarea v-model="params.content" placeholder="最近打卡了什么地方，有什么新奇体验呢？"></textarea>
+      <!-- 多行输入用 el-input textarea：原生 textarea 语义，Enter 换行、连续空格原样保留，
+           高度随内容自增（minRows/maxRows），超出后内部滚动，避免底部被键盘遮挡 -->
+      <el-input
+        v-model="params.content"
+        type="textarea"
+        :autosize="{ minRows: 10, maxRows: 22 }"
+        resize="none"
+        maxlength="2000"
+        show-word-limit
+        placeholder="最近打卡了什么地方，有什么新奇体验呢？"
+      />
     </div>
     <div class="divider"></div>
   </div>
@@ -35,6 +45,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request, { uploadRequest } from '../api/request'
+import { normalizeContent } from '../utils/blogContent'
 
 const router = useRouter()
 
@@ -42,7 +53,9 @@ const router = useRouter()
 const fileList = ref([])
 // fileNames 保存服务端返回的相对路径（/blogs/...），删除接口需要的是这个
 const fileNames = ref([])
-const params = reactive({})
+// content 必须显式初始化：reactive({}) 上的新增属性虽能被 v-model 写入，
+// 但初始为 undefined 时 el-input 会按"未定义"处理自动高度，输入时才跳变
+const params = reactive({ title: '', content: '' })
 const shops = ref([])
 const shopName = ref('')
 const selectedShop = ref({})
@@ -60,18 +73,20 @@ function queryShops() {
 }
 
 function submitBlog() {
-  if (!params.title || !params.title.trim()) {
+  const title = params.title.trim()
+  const content = normalizeContent(params.content)
+  if (!title) {
     ElMessage.error('请填写游记标题')
     return
   }
-  if (!params.content || !params.content.trim()) {
+  if (!content) {
     ElMessage.error('请填写游记内容')
     return
   }
   if (submitting.value) return
   submitting.value = true
 
-  const data = { title: params.title, content: params.content }
+  const data = { title, content }
   data.images = fileList.value.join(',')
   if (selectedShop.value.id) data.shopId = selectedShop.value.id
   request.post('/blog', data)
@@ -221,21 +236,39 @@ function goBack() {
   border-bottom: 1px solid #eee;
   outline: none;
 }
-.blog-content textarea {
+/* 正文输入：沿用原 textarea 的无边框满宽风格，改为作用于 el-input 内部 textarea。
+   padding-bottom 给右下角字数统计留出空间，避免文字压到计数上 */
+.blog-content :deep(.el-textarea__inner) {
   width: 100%;
   box-sizing: border-box;
-  height: 300px;
-  padding: 20px;
+  padding: 20px 20px 30px;
   border: none;
+  border-radius: 0;
+  box-shadow: none;
   resize: none;
+  font-family: inherit;
   font-size: 15px;
   line-height: 1.6;
+  color: #333;
   outline: none;
+}
+.blog-content :deep(.el-textarea__inner:focus) {
+  box-shadow: none;
+}
+.blog-content :deep(.el-input__count) {
+  right: 16px;
+  bottom: 8px;
+  background: transparent;
+  font-size: 12px;
+  color: #bbb;
 }
 input::placeholder {
   color: #cccccc;
 }
 textarea::placeholder {
+  color: #cccccc;
+}
+.blog-content :deep(.el-textarea__inner::placeholder) {
   color: #cccccc;
 }
 .divider {

@@ -103,6 +103,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import FootBar from '../components/FootBar.vue'
 import request from '../api/request'
+import { toPlainSummary } from '../utils/blogContent'
 
 const router = useRouter()
 
@@ -225,7 +226,8 @@ function loadFollowedBlogs() {
         userName: blog.name,
         coverImage: blog.images.split(',')[0],
         title: blog.title,
-        description: blog.content,
+        // 卡片摘要只取纯文本：历史数据正文带 <br>，直接插值会把标签当文字露出来
+        description: toPlainSummary(blog.content),
         createTime: formatTime(blog.createTime),
         likeCount: blog.liked,
         commentCount: blog.comments
