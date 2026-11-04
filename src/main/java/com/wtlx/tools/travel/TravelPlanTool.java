@@ -38,7 +38,8 @@ public class TravelPlanTool {
     private TravelPlanToolSupport support;
 
     @Tool(description = "创建一份新的旅行计划（空计划，不含日程与清单）。"
-            + "当用户明确要求「帮我建一个旅行计划」「把这些安排存下来」「生成一个行程计划」时调用。"
+            + "用户说「帮我建一个计划」「做个 X 天行程」「把这些安排存下来」时必须调用本工具——"
+            + "只输出文字方案而不调用，等于没完成任务。"
             + "创建成功会返回计划ID，后续添加行程、账单、行李都必须用这个ID。")
     public String createTravelPlan(
             @ToolParam(description = "计划名称，例如「云南5日游」「成都周末行」") String title,
