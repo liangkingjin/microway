@@ -77,17 +77,17 @@ public class BlogController {
     }
 
     /**
-     * 游标分页查询博客（首页达人攻略无限滚动）
-     * @param lastId 上一页最后一条博客 id，首页传空
+     * 分页查询游记（首页双列无限滚动）
+     * @param cursor 翻页游标，首页传空
      * @param pageSize 每页条数，默认 10
-     * @return {list, hasMore}
+     * @return {list, hasMore, cursor}
      */
     @GetMapping("/hot/cursor")
-    @ApiOperation("游标分页查询所有博客")
+    @ApiOperation("分页查询游记")
     public Result queryHotBlogCursor(
-            @RequestParam(value = "lastId", required = false) Long lastId,
+            @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "pageSize", defaultValue = "10") Integer pageSize) {
-        return blogService.queryHotBlogByCursor(lastId, pageSize);
+        return blogService.queryHotBlogByCursor(cursor, pageSize);
     }
 
     /**

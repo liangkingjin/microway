@@ -12,6 +12,7 @@ import com.wtlx.domain.entity.Follow;
 import com.wtlx.domain.entity.TbBlogComments;
 import com.wtlx.domain.entity.User;
 import com.wtlx.repository.mapper.BlogMapper;
+import com.wtlx.service.IBlogFeedSnapshotService;
 import com.wtlx.service.IBlogService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wtlx.service.ILikedService;
@@ -35,6 +36,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -54,6 +56,8 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
     private ILikedService likedService;
     @Resource
     private RagDocIndexProducer ragDocIndexProducer;
+    @Resource
+    private IBlogFeedSnapshotService feedSnapshotService;
     /**
      * 根据id查询博客
      * @param id
@@ -113,35 +117,66 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
     }
 
     /**
-     * 游标分页查询所有博客
-     * 按 id 倒序取一页，lastId 为上一页最后一条的 id；lastId 为空时取第一页。
-     * 相比 offset 分页不会因新增/删除数据导致重复或漏读。
-     * @param lastId 游标，可为空
-     * @param pageSize 每页条数，默认 10，上限 50
-     * @return {list: 博客列表, hasMore: 是否还有更多}
+     * 首页双列流分页
+     * 批次召回与粗排由快照服务完成，这里只负责按 id 回表组装。
+     * @param cursor 翻页游标，首页传空
+     * @param pageSize 每页条数
+     * @return {list, hasMore, cursor}
      */
     @Override
-    public Result queryHotBlogByCursor(Long lastId, Integer pageSize) {
+    public Result queryHotBlogByCursor(String cursor, Integer pageSize) {
         int size = (pageSize == null || pageSize <= 0) ? 10 : Math.min(pageSize, 50);
-        List<Blog> records = query()
-                .orderByDesc("id")
-                .lt(lastId != null, "id", lastId)
-                .last("limit " + (size + 1))
-                .list();
-        // 多查 1 条用于判断是否还有下一页
-        boolean hasMore = records.size() > size;
-        if (hasMore) {
-            records = records.subList(0, size);
-        }
-        // 补充用户信息与点赞状态
-        records.forEach(blog -> {
-            this.queryBlogUser(blog);
-            this.isBlogLiked(blog);
-        });
+        UserDTO loginUser = UserHolder.getUser();
+        IBlogFeedSnapshotService.FeedPage page = feedSnapshotService.page(
+                loginUser == null ? null : loginUser.getId(), cursor, size);
+
+        List<Blog> records = assembleByIds(page.ids());
+
         Map<String, Object> data = new HashMap<>();
         data.put("list", records);
+        // 整页游记都被删除时不再继续翻页，避免前端空转
+        boolean hasMore = page.hasMore() && !records.isEmpty();
         data.put("hasMore", hasMore);
+        data.put("cursor", hasMore ? page.nextCursor() : null);
         return Result.ok(data);
+    }
+
+    /**
+     * 按给定顺序回表组装游记，批量查作者，跳过已删除的记录。
+     * 原来逐条查用户会产生 N+1 查询，且作者不存在时直接空指针。
+     */
+    private List<Blog> assembleByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, Blog> blogMap = query().in("id", ids).list().stream()
+                .collect(Collectors.toMap(Blog::getId, blog -> blog));
+        List<Blog> ordered = ids.stream().map(blogMap::get).filter(Objects::nonNull).toList();
+        fillAuthors(ordered);
+        ordered.forEach(this::isBlogLiked);
+        return ordered;
+    }
+
+    /**
+     * 批量填充作者头像与昵称。作者已注销时保留游记本身，不能整页失败。
+     */
+    private void fillAuthors(List<Blog> blogs) {
+        if (blogs == null || blogs.isEmpty()) {
+            return;
+        }
+        Set<Long> authorIds = blogs.stream().map(Blog::getUserId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (authorIds.isEmpty()) {
+            return;
+        }
+        Map<Long, User> authors = userService.listByIds(authorIds).stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+        blogs.forEach(blog -> {
+            User author = authors.get(blog.getUserId());
+            if (author != null) {
+                blog.setIcon(author.getIcon());
+                blog.setName(author.getNickName());
+            }
+        });
     }
 
     /**
@@ -302,10 +337,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
      * @param blog
      */
     private void queryBlogUser(Blog blog) {
-        Long userId = blog.getUserId();
-        User user = userService.getById(userId);
-        blog.setIcon(user.getIcon());
-        blog.setName(user.getNickName());
+        fillAuthors(List.of(blog));
     }
 
     /**

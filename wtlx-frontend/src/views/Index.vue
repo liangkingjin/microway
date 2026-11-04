@@ -116,8 +116,8 @@ onMounted(() => {
 
 const types = ref([])
 const blogs = ref([])
-// 达人攻略游标分页：lastId 为当前列表最后一条博客 id，空表示首页
-const blogLastId = ref(null)
+// 达人攻略分页：cursor 由后端下发，前端只透传，不需要理解批次边界
+const feedCursor = ref(null)
 const blogHasMore = ref(true)
 const blogLoading = ref(false)
 const blogNoMore = ref(false)
@@ -173,18 +173,17 @@ function loadBlogsCursor() {
   blogLoading.value = true
   request.get('/blog/hot/cursor', {
     params: {
-      lastId: blogLastId.value,
+      cursor: feedCursor.value,
       pageSize: 10
     }
   })
     .then(res => {
       const data = res.data
-      data.list.forEach(b => b.img = b.images.split(',')[0])
-      blogs.value = blogs.value.concat(data.list)
+      const list = data.list || []
+      list.forEach(b => b.img = (b.images || '').split(',')[0])
+      blogs.value = blogs.value.concat(list)
+      feedCursor.value = data.cursor
       blogHasMore.value = data.hasMore
-      if (data.list.length > 0) {
-        blogLastId.value = data.list[data.list.length - 1].id
-      }
       if (!data.hasMore) blogNoMore.value = true
     })
     .catch(err => {

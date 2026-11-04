@@ -67,6 +67,18 @@ public class RedisConstants {
      */
     public static final String TRAVEL_LIKED_COUNT_KEY = "likes:travel";
 
+    /**
+     * 游记双列流批次缓存（ZSet）
+     * key格式：feed:blog:{用户ID}:{批次起点时间戳}_{批次起点ID}
+     * member：游记ID:创建时间戳，score：批内粗排序位
+     */
+    public static final String FEED_BLOG_BATCH_KEY = "feed:blog:";
+
+    /**
+     * 游记批次缓存存活时间（秒），过期只影响内存回收，不影响翻页连续性
+     */
+    public static final Long FEED_BLOG_BATCH_TTL = 600L;
+
     public static final String FEED_KEY = "feed:";
     public static final String SHOP_GEO_KEY = "shop:geo:";
     public static final String USER_SIGN_KEY = "sign:";

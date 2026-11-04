@@ -28,12 +28,12 @@ public interface IBlogService extends IService<Blog> {
     Result queryHotBlog(Integer current);
 
     /**
-     * 游标分页查询所有博客（按 id 倒序，lastId 为上一页最后一条的 id，为空则查第一页）
-     * @param lastId 游标（上一页最后一条博客 id），可为空
+     * 分页查询全部游记（首页双列流）：批内粗排 + 批次缓存，游标翻页
+     * @param cursor 翻页游标，首页传空
      * @param pageSize 每页条数
-     * @return {list: 博客列表, hasMore: 是否还有更多}
+     * @return {list: 游记列表, hasMore: 是否还有更多, cursor: 下一页游标}
      */
-    Result queryHotBlogByCursor(Long lastId, Integer pageSize);
+    Result queryHotBlogByCursor(String cursor, Integer pageSize);
 
     /**
      * 点赞列表查询
