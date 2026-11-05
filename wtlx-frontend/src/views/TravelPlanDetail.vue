@@ -225,7 +225,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
@@ -330,6 +330,44 @@ function openSpot(name) {
   router.push({ path: '/spot-detail', query: { name } })
 }
 
+/**
+ * 从景点详情返回时恢复滚动位置。
+ * 路由切换会销毁本组件，页面高度瞬间塌成 0，浏览器随即把 scrollY 归零；
+ * 等数据与地图重新渲染出来时，用户已经停在页面顶部了。
+ */
+const planScrollKey = 'wt:plan-scroll:' + (getUrlParam('id') || '')
+
+function savePlanScroll() {
+  try {
+    sessionStorage.setItem(planScrollKey, String(window.scrollY || 0))
+  } catch (e) {
+    // 存储不可用（隐私模式）时忽略，退化为原来的行为
+  }
+}
+
+function restorePlanScroll() {
+  // 只在「从景点详情返回」时恢复；从列表新进计划时停在顶部才是正确的
+  const back = window.history.state && window.history.state.back
+  if (!back || !String(back).includes('spot-detail')) {
+    return
+  }
+  let y = 0
+  try {
+    y = Number(sessionStorage.getItem(planScrollKey) || 0)
+  } catch (e) {
+    return
+  }
+  if (!y) {
+    return
+  }
+  // 等行程条目与地图渲染完再滚：此时页面高度才够，否则 scrollTo 会被截断在山顶附近
+  nextTick(() => {
+    window.requestAnimationFrame(() => window.scrollTo(0, y))
+  })
+}
+
+onBeforeUnmount(savePlanScroll)
+
 // 按天把行程条目里的【地点名】提出来，交给内嵌地图自动串联。
 // computed 缓存保证传给子组件的数组引用稳定，只有真正改动条目时才触发重画。
 const routeStopsByDay = computed(() => {
@@ -426,6 +464,9 @@ function loadItineraryItems(planId) {
           return a.time.localeCompare(b.time)
         })
       })
+
+      // 列表就位后再恢复滚动，避免时机太早导致页面高度不够
+      restorePlanScroll()
     })
     .catch(error => {
       console.error('加载行程失败:', error)
