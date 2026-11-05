@@ -168,7 +168,7 @@ server {
    - 轮播/倒计时 `setInterval` 增加 `onBeforeUnmount` 清理（原页面离开后不清理，属内存泄漏修复）；
    - 订单状态标签：原非法 `el-tag :type` 值映射为 Element Plus 合法类型（0 待支付→warning / 1 已支付→primary / 2 已确认→success / 3 已取消→info / 4 已完成→success）；
    - 清单详情：`el-time-picker` 的 Vue2 `step` 配置改为 EP `el-time-select`（15 分钟步进等价）；添加账单/行李后不再整页 reload，改为就地刷新并停留当前 tab（修复原页 reload 后 tab 硬编码跳回行程的缺陷）；
-   - shop-detail：原模板未绑定的 seckill 死代码裁剪，`queryVoucher` 网络调用保留；
+   - shop-detail：原模板未绑定的 seckill 死代码裁剪，`queryVoucher`（`/voucher/list/:id`，后端无对应 Controller）已删除，不再产生 404；
    - TripItinerary：分享弹窗由脆弱 querySelector 反查改为类选择器绑定；百度地图 GL 脚本改为组件 onMounted 动态注入（两个页面各自的 ak 原值保留）；
    - video-edit：原 `util.getUserId()` 在 common.js 中本不存在（恒 undefined），迁移后提交体不再带 userId（后端从 token 解析）；
    - page1~4：原 `.article-content` 无任何 CSS 定义，补最小可读样式（padding/行高/图片圆角），文案结构不变。

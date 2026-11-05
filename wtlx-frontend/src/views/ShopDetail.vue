@@ -116,13 +116,11 @@ import { getUrlParam } from '../utils/index'
 const router = useRouter()
 
 const shop = ref({})
-const vouchers = ref([])
 const hotelRooms = ref([])
 
 onMounted(() => {
   const shopId = getUrlParam('id')
   queryShopById(shopId)
-  queryVoucher(shopId)
 })
 
 function goBack() {
@@ -147,16 +145,6 @@ function queryShopById(shopId) {
     })
     .catch(err => {
       ElMessage.error(typeof err === 'string' ? err : '加载店铺信息失败')
-    })
-}
-
-function queryVoucher(shopId) {
-  request.get('/voucher/list/' + shopId)
-    .then(res => {
-      vouchers.value = res.data || []
-    })
-    .catch(err => {
-      console.error('加载优惠券失败:', err)
     })
 }
 
