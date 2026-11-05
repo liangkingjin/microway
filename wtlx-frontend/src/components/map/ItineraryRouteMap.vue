@@ -17,7 +17,7 @@
         class="itinerary-route__stop"
         @click="openSpot(s.name)"
       >
-        <b>{{ i + 1 }}</b>{{ s.name }}<i class="itinerary-route__chev">›</i>
+        <b :style="{ background: typeColor(s.type) }">{{ i + 1 }}</b>{{ s.name }}<i class="itinerary-route__chev">›</i>
       </button>
     </div>
   </div>
@@ -31,7 +31,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { loadMapSdk, renderItineraryRoute } from '../../utils/itineraryRoute'
+import { loadMapSdk, renderItineraryRoute, typeColor } from '../../utils/itineraryRoute'
 
 let seq = 0
 

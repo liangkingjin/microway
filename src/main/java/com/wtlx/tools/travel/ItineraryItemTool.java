@@ -39,6 +39,10 @@ public class ItineraryItemTool {
     @Resource
     private IScenicInfoService scenicInfoService;
 
+    /** 行程类型白名单，与前端标签映射保持一致 */
+    private static final java.util.Set<String> ITEM_TYPES =
+            java.util.Set.of("SCENIC", "TRANSPORT", "HOTEL", "DINING", "OTHER");
+
     /**
      * 行程条目入参
      */
@@ -59,6 +63,11 @@ public class ItineraryItemTool {
                 + "（如「黄鹤楼」「湖北省博物馆」），必须是百度地图能检索到的真实地点名；"
                 + "纯交通、用餐、休息、自由活动的条目不填。填了之后用户可以在行程里点开该景点的详情。")
         private String spotName;
+
+        @ToolParam(required = false, description = "行程类型，可选值：SCENIC（景点游览）、"
+                + "TRANSPORT（交通赶路）、HOTEL（入住退房住宿）、DINING（用餐）、OTHER（其他自由活动）。"
+                + "用于行程分类展示与地图点位着色，务必按实际含义填写。")
+        private String itemType;
     }
 
     @Tool(description = "为旅行计划批量添加行程条目。一次调用提交该计划的所有日程，不要逐条调用。"
@@ -113,7 +122,8 @@ public class ItineraryItemTool {
                     .setDate(date)
                     .setTime(time)
                     .setContent(content)
-                    .setSpotName(spotName);
+                    .setSpotName(spotName)
+                    .setItemType(resolveItemType(input, spotName));
             if (support.itineraries().save(item)) {
                 saved++;
                 // 顺带把这条行程里的【地点】收集起来：计划一生成就把景点资料准备好，
@@ -162,6 +172,18 @@ public class ItineraryItemTool {
             return content;
         }
         return "【" + spotName + "】" + content;
+    }
+
+    /**
+     * 行程类型白名单；没传或传了不认识的值时按"有没有关联景点"兜底推断，
+     * 保证老数据 / 模型不填的情况下列表照样能分类展示。
+     */
+    private String resolveItemType(ItineraryItemInput input, String spotName) {
+        String raw = input.getItemType() == null ? "" : input.getItemType().strip().toUpperCase();
+        if (ITEM_TYPES.contains(raw)) {
+            return raw;
+        }
+        return spotName == null ? "OTHER" : "SCENIC";
     }
 
     @Tool(description = "修改某一条行程的日期、时间或内容。只传要改的字段，未传的保持不变。"

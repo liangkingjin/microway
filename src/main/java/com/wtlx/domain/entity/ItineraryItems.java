@@ -48,6 +48,9 @@ public class ItineraryItems implements Serializable {
     @ApiModelProperty(value = "关联景点名：有值时前端把该景点渲染成可点入口，进入景点详情")
     private String spotName;
 
+    @ApiModelProperty(value = "行程类型：SCENIC 景点 / TRANSPORT 交通 / HOTEL 住宿 / DINING 餐饮 / OTHER 其他")
+    private String itemType;
+
     private LocalDateTime createdAt;
 
 

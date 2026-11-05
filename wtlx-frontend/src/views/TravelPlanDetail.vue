@@ -36,6 +36,9 @@
               class="itinerary-item"
               @click="showItemActions(day.date, item)">
               <div class="item-time">{{ formatTime(item.time) }}</div>
+              <span class="item-type" :class="'item-type--' + (item.itemType || 'OTHER').toLowerCase()">
+                {{ itemTypeLabel(item.itemType) }}
+              </span>
               <div class="item-content">
                 <!-- 按【景点名】把正文切段渲染：景点名是可点入口，其余是纯文本（不走 v-html） -->
                 <template v-for="(seg, si) in contentSegments(item)" :key="si">
@@ -214,6 +217,18 @@ const days = ref([])
 const router = useRouter()
 // 全局正则用于切段，每次使用前必须重置 lastIndex
 const POI_SEGMENT_RE = /【([^】]{1,40})】/g
+// 行程类型标签：与后端 itemType 白名单一一对应
+const ITEM_TYPE_LABELS = {
+  SCENIC: '景点',
+  TRANSPORT: '交通',
+  HOTEL: '住宿',
+  DINING: '餐饮',
+  OTHER: '其他'
+}
+
+function itemTypeLabel(type) {
+  return ITEM_TYPE_LABELS[type] || '其他'
+}
 const showActions = ref(false)
 const dialogVisible = ref(false)
 const isEditing = ref(false)
@@ -370,6 +385,7 @@ function loadItineraryItems(planId) {
             id: item.id,
             content: item.content,
             spotName: item.spotName || '',
+            itemType: item.itemType || '',
             date: formatDate(new Date(item.date)),
             time: item.time
           })
@@ -858,6 +874,22 @@ function formatTime(timeString) {
   font-size: 14px;
   font-weight: 500;
 }
+/* 行程类型标签：景点/交通/住宿/餐饮/其他，一眼分清这行是干嘛的 */
+.item-type {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.item-type--scenic { color: #409eff; background: #ecf5ff; }
+.item-type--transport { color: #909399; background: #f4f4f5; }
+.item-type--hotel { color: #8e44ad; background: #f5eef8; }
+.item-type--dining { color: #e6a23c; background: #fdf6ec; }
+.item-type--other { color: #909399; background: #f4f4f5; }
 .item-content {
   flex: 1;
   margin-left: 12px;

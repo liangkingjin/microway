@@ -18,6 +18,19 @@ export function bmapStatusOk(status) {
   return status === (window.BMAP_STATUS_SUCCESS ?? 0)
 }
 
+/** 行程类型配色：列表标签与地图点位共用一套，避免两处对不上 */
+export const TYPE_COLORS = {
+  SCENIC: '#409eff',
+  TRANSPORT: '#909399',
+  HOTEL: '#8e44ad',
+  DINING: '#e6a23c',
+  OTHER: '#909399'
+}
+
+export function typeColor(type) {
+  return TYPE_COLORS[type] || TYPE_COLORS.OTHER
+}
+
 /** 从行程条目里取出景点名：结构化字段 spotName 优先，其次才是 content 里的【】标注 */
 export function extractStops(items) {
   return (items || [])
@@ -26,7 +39,12 @@ export function extractStops(items) {
       const match = explicit ? null : POI_PATTERN.exec(item.content || '')
       const name = explicit || (match ? match[1].trim() : '')
       return name
-        ? { name, time: item.time || '', content: item.content || '' }
+        ? {
+            name,
+            time: item.time || '',
+            content: item.content || '',
+            type: item.itemType || 'SCENIC'
+          }
         : null
     })
     .filter(Boolean)
@@ -98,7 +116,7 @@ function addNumberedMarkers(map, BMapGL, points) {
     })
     label.setStyle({
       border: 'none',
-      background: '#409eff',
+      background: typeColor(p.stop.type),
       color: '#fff',
       borderRadius: '10px',
       padding: '1px 6px',
