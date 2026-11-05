@@ -114,6 +114,19 @@
       width="90%">
       <div class="itinerary-form">
         <div class="form-item">
+          <div class="form-label">行程类型</div>
+          <div class="type-picker">
+            <button
+              v-for="t in ITEM_TYPES"
+              :key="t.value"
+              type="button"
+              class="type-chip"
+              :class="[{ active: currentItem.itemType === t.value }, 'type-chip--' + t.value.toLowerCase()]"
+              @click="currentItem.itemType = t.value"
+            >{{ t.label }}</button>
+          </div>
+        </div>
+        <div class="form-item">
           <div class="form-label">选择时间</div>
           <el-time-select
             v-model="currentItem.time"
@@ -132,6 +145,16 @@
             :rows="4"
             placeholder="请输入行程内容">
           </el-input>
+        </div>
+        <!-- 只有景点才有"点开详情 / 进路线串联"的语义，其余类型不需要填景点名 -->
+        <div v-if="currentItem.itemType === 'SCENIC'" class="form-item">
+          <div class="form-label">景点名称</div>
+          <el-input
+            v-model="currentItem.spotName"
+            placeholder="如：黄鹤楼（留空则自动从内容里的【】读取）"
+            class="form-input">
+          </el-input>
+          <p class="form-hint">填写后可在地图上串联路线，并点开查看景点介绍、游览建议与图片</p>
         </div>
       </div>
       <template #footer>
@@ -217,14 +240,18 @@ const days = ref([])
 const router = useRouter()
 // 全局正则用于切段，每次使用前必须重置 lastIndex
 const POI_SEGMENT_RE = /【([^】]{1,40})】/g
-// 行程类型标签：与后端 itemType 白名单一一对应
-const ITEM_TYPE_LABELS = {
-  SCENIC: '景点',
-  TRANSPORT: '交通',
-  HOTEL: '住宿',
-  DINING: '餐饮',
-  OTHER: '其他'
-}
+// 行程类型：与后端 itemType 白名单一一对应，手动添加与 AI 添加共用同一套
+const ITEM_TYPES = [
+  { value: 'SCENIC', label: '景点' },
+  { value: 'TRANSPORT', label: '交通' },
+  { value: 'HOTEL', label: '住宿' },
+  { value: 'DINING', label: '餐饮' },
+  { value: 'OTHER', label: '其他' }
+]
+const ITEM_TYPE_LABELS = ITEM_TYPES.reduce((map, t) => {
+  map[t.value] = t.label
+  return map
+}, {})
 
 function itemTypeLabel(type) {
   return ITEM_TYPE_LABELS[type] || '其他'
@@ -236,7 +263,9 @@ const currentItem = reactive({
   id: null,
   content: '',
   date: null,
-  time: ''
+  time: '',
+  itemType: 'SCENIC',
+  spotName: ''
 })
 const selectedDate = ref(null)
 const selectedItem = ref(null)
@@ -438,6 +467,8 @@ function addItinerary(date) {
   currentItem.id = null
   currentItem.content = ''
   currentItem.date = date
+  currentItem.itemType = 'SCENIC'
+  currentItem.spotName = ''
   const now = new Date()
   currentItem.time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
   dialogVisible.value = true
@@ -478,6 +509,8 @@ function editItem() {
   currentItem.content = selectedItem.value.content
   currentItem.date = selectedItem.value.date
   currentItem.time = selectedItem.value.time
+  currentItem.itemType = selectedItem.value.itemType || 'OTHER'
+  currentItem.spotName = selectedItem.value.spotName || ''
   dialogVisible.value = true
   showActions.value = false
 }
@@ -524,12 +557,31 @@ function saveItem() {
   const today = new Date()
   const formattedDate = `${today.getFullYear()}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`
 
+  const itemType = currentItem.itemType || 'OTHER'
+  // 只有景点才需要景点名：优先用输入框，留空则从内容里的【】读取
+  let spotName = ''
+  if (itemType === 'SCENIC') {
+    spotName = (currentItem.spotName || '').trim()
+    if (!spotName) {
+      POI_SEGMENT_RE.lastIndex = 0
+      const match = POI_SEGMENT_RE.exec(currentItem.content)
+      spotName = match ? match[1].trim() : ''
+    }
+  }
+  let content = currentItem.content.trim()
+  if (spotName && !content.startsWith('【')) {
+    // 与 AI 写入的格式保持一致，地图与可点链接才认得出
+    content = `【${spotName}】${content}`
+  }
+
   const itemData = {
     planId: planDetail.value.id,
     date: formattedDate,
     time: typeof currentItem.time === 'string' ? currentItem.time : currentItem.time,
-    content: currentItem.content.trim(),
-    title: currentItem.content.trim(),
+    content,
+    spotName,
+    itemType,
+    title: content,
     status: 'pending'
   }
 
@@ -543,6 +595,8 @@ function saveItem() {
             day.items.splice(index, 1, {
               id: currentItem.id,
               content: itemData.content,
+              spotName,
+              itemType,
               date: currentItem.date,
               time: itemData.time
             })
@@ -1210,4 +1264,31 @@ function formatTime(timeString) {
 .form-input {
   width: 100%;
 }
+.form-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #909399;
+}
+/* 类型选择：手点一排胶囊，比下拉更快，且颜色与列表标签一致 */
+.type-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.type-chip {
+  padding: 5px 14px;
+  border: 1px solid #dcdfe6;
+  border-radius: 16px;
+  background: #fff;
+  font-size: 13px;
+  color: #606266;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.type-chip--scenic.active { border-color: #409eff; color: #409eff; background: #ecf5ff; }
+.type-chip--transport.active { border-color: #909399; color: #606266; background: #f4f4f5; }
+.type-chip--hotel.active { border-color: #8e44ad; color: #8e44ad; background: #f5eef8; }
+.type-chip--dining.active { border-color: #e6a23c; color: #b8791f; background: #fdf6ec; }
+.type-chip--other.active { border-color: #909399; color: #606266; background: #f4f4f5; }
 </style>

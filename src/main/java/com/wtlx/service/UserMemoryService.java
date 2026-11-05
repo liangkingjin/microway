@@ -58,13 +58,6 @@ public interface UserMemoryService {
     int deleteAll();
 
     /**
-     * 补建记忆相关表结构（PG 恢复后重试）
-     *
-     * @return DDL 失败条数，0 表示全部成功
-     */
-    int ensureSchema();
-
-    /**
      * 全局记忆类型分布（运维观测）
      */
     Map<String, Integer> stats();

@@ -71,13 +71,6 @@ public class MemoryController {
         return Result.ok("已清空 " + userMemoryService.deleteAll() + " 条记忆");
     }
 
-    @ApiOperation("补建记忆相关表结构（PG 恢复后重试）")
-    @PostMapping("/schema")
-    public Result ensureSchema() {
-        int failures = userMemoryService.ensureSchema();
-        return failures == 0 ? Result.ok("表结构就绪") : Result.fail("存在 " + failures + " 条 DDL 失败，请查看日志");
-    }
-
     @ApiOperation("全局记忆类型分布（运维观测）")
     @GetMapping("/stats")
     public Result stats() {

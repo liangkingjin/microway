@@ -6,7 +6,6 @@ import com.wtlx.domain.entity.memory.MemoryHit;
 import com.wtlx.domain.entity.memory.MemoryOverviewVO;
 import com.wtlx.domain.entity.memory.UserMemory;
 import com.wtlx.infrastructure.memory.retrieval.MemoryRetrievalService;
-import com.wtlx.infrastructure.memory.schema.MemorySchemaInitializer;
 import com.wtlx.repository.mapper.ConversationMessageMapper;
 import com.wtlx.repository.mapper.ConversationSummaryMapper;
 import com.wtlx.repository.mapper.UserMemoryMapper;
@@ -42,9 +41,6 @@ public class UserMemoryServiceImpl implements UserMemoryService {
 
     @Resource
     private MemoryRetrievalService memoryRetrievalService;
-
-    @Resource
-    private MemorySchemaInitializer memorySchemaInitializer;
 
     @Resource
     private UserMemoryMapper userMemoryMapper;
@@ -108,11 +104,6 @@ public class UserMemoryServiceImpl implements UserMemoryService {
     @Override
     public int deleteAll() {
         return userMemoryMapper.deleteByUser(currentUserId());
-    }
-
-    @Override
-    public int ensureSchema() {
-        return memorySchemaInitializer.ensureSchema();
     }
 
     @Override
