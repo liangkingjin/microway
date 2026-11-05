@@ -77,7 +77,7 @@ const params = reactive({
 })
 
 onMounted(() => {
-  params.typeId = getUrlParam('type')
+  params.typeId = Number(getUrlParam('type')) || 0
   typeName.value = getUrlParam('name')
   queryTypes()
   queryShops()

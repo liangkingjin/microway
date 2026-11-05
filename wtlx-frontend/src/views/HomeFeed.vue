@@ -16,9 +16,9 @@
     <!-- 推荐页 -->
     <div v-if="activeTab === 'recommend'">
       <div class="swiper-container" style="margin: 8px 0;">
-        <el-carousel :interval="3000" arrow="always" indicator-position="inside" height="160px" style="border-radius: 8px;">
+        <el-carousel :interval="3000" arrow="always" height="160px" style="border-radius: 8px;">
           <el-carousel-item v-for="item in 4" :key="item" style="border-radius: 8px; overflow: hidden;">
-            <router-link :to="'/page' + item">
+            <router-link :to="BANNER_PATHS[item - 1]">
               <img :src="'/imgs/banner/banner' + item + '.png'" :alt="'Banner ' + item" style="width: 100%; height: 100%; object-fit: cover;">
             </router-link>
           </el-carousel-item>
@@ -85,7 +85,7 @@
           <div class="blog-footer">
             <span class="blog-time">{{ blog.createTime }}</span>
             <div class="blog-stats">
-              <span class="like-count"><el-icon><Thumb /></el-icon> {{ blog.likeCount }}</span>
+              <span class="like-count"><el-icon><Pointer /></el-icon> {{ blog.likeCount }}</span>
               <span class="comment-count"><el-icon><ChatDotRound /></el-icon> {{ blog.commentCount }}</span>
             </div>
           </div>
@@ -106,6 +106,14 @@ import request from '../api/request'
 import { toPlainSummary } from '../utils/blogContent'
 
 const router = useRouter()
+
+// 首页轮播 4 张 banner 对应的精选攻略（原 /page1~4 旧路径）
+const BANNER_PATHS = [
+  '/cherry-blossom-guide',
+  '/hainan-island-guide',
+  '/photo-spots-guide',
+  '/spring-outing-guide'
+]
 
 // 原 created() 中一次性加载
 onMounted(() => {
