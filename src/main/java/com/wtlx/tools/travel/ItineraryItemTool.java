@@ -54,6 +54,11 @@ public class ItineraryItemTool {
 
         @ToolParam(description = "行程内容，例如「抵达昆明长水机场，打车入住酒店」")
         private String content;
+
+        @ToolParam(required = false, description = "关联景点名称：当这条行程是去某个具体景点时填写"
+                + "（如「黄鹤楼」「湖北省博物馆」），必须是百度地图能检索到的真实地点名；"
+                + "纯交通、用餐、休息、自由活动的条目不填。填了之后用户可以在行程里点开该景点的详情。")
+        private String spotName;
     }
 
     @Tool(description = "为旅行计划批量添加行程条目。一次调用提交该计划的所有日程，不要逐条调用。"
@@ -101,19 +106,25 @@ public class ItineraryItemTool {
                 failures.add(label + "：" + e.getMessage());
                 continue;
             }
+            String spotName = resolveSpotName(input);
+            String content = normalizeContent(input.getContent().trim(), spotName);
             ItineraryItems item = new ItineraryItems()
                     .setPlanId(planId)
                     .setDate(date)
                     .setTime(time)
-                    .setContent(input.getContent().trim());
+                    .setContent(content)
+                    .setSpotName(spotName);
             if (support.itineraries().save(item)) {
                 saved++;
                 // 顺带把这条行程里的【地点】收集起来：计划一生成就把景点资料准备好，
                 // 用户点开详情时直接命中缓存，而不是现场等生成
-                for (String spot : ScenicInfoServiceImpl.extractSpotNames(item.getContent())) {
+                for (String spot : ScenicInfoServiceImpl.extractSpotNames(content)) {
                     if (!spotNames.contains(spot)) {
                         spotNames.add(spot);
                     }
+                }
+                if (spotName != null && !spotNames.contains(spotName)) {
+                    spotNames.add(spotName);
                 }
             } else {
                 failures.add(label + "：数据库写入失败");
@@ -130,6 +141,27 @@ public class ItineraryItemTool {
         }
         log.info("AI 批量添加行程, planId: {}, 成功 {} 条, 失败 {} 条", planId, saved, failures.size());
         return summary;
+    }
+
+    /**
+     * 景点名优先取显式入参（AI 按工具描述填写），其次从 content 的【】标注里解析，
+     * 兼容模型只写正文、没传 spotName 的情况。
+     */
+    private String resolveSpotName(ItineraryItemInput input) {
+        String explicit = input.getSpotName() == null ? "" : input.getSpotName().strip();
+        if (!explicit.isEmpty()) {
+            return explicit;
+        }
+        List<String> fromContent = ScenicInfoServiceImpl.extractSpotNames(input.getContent());
+        return fromContent.isEmpty() ? null : fromContent.get(0);
+    }
+
+    /** 有景点但正文没标注时补上【景点名】前缀——前端只认这一种格式，避免两套渲染逻辑 */
+    private String normalizeContent(String content, String spotName) {
+        if (spotName == null || content.startsWith("【")) {
+            return content;
+        }
+        return "【" + spotName + "】" + content;
     }
 
     @Tool(description = "修改某一条行程的日期、时间或内容。只传要改的字段，未传的保持不变。"

@@ -36,7 +36,13 @@
               class="itinerary-item"
               @click="showItemActions(day.date, item)">
               <div class="item-time">{{ formatTime(item.time) }}</div>
-              <div class="item-content">{{ item.content }}</div>
+              <div class="item-content">
+                <!-- 按【景点名】把正文切段渲染：景点名是可点入口，其余是纯文本（不走 v-html） -->
+                <template v-for="(seg, si) in contentSegments(item)" :key="si">
+                  <a v-if="seg.spot" class="item-spot" @click.stop="openSpot(seg.spot)">{{ seg.text }}</a>
+                  <span v-else>{{ seg.text }}</span>
+                </template>
+              </div>
             </div>
 
             <div class="add-item" @click="addItinerary(day.date)">
@@ -194,6 +200,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
 import ItineraryRouteMap from '../components/map/ItineraryRouteMap.vue'
@@ -204,6 +211,9 @@ import { extractStops } from '../utils/itineraryRoute'
 const activeTab = ref('itinerary')
 const planDetail = ref(null)
 const days = ref([])
+const router = useRouter()
+// 全局正则用于切段，每次使用前必须重置 lastIndex
+const POI_SEGMENT_RE = /【([^】]{1,40})】/g
 const showActions = ref(false)
 const dialogVisible = ref(false)
 const isEditing = ref(false)
@@ -246,6 +256,35 @@ const expenseTypes = {
 const totalExpenses = computed(() => {
   return bills.value.reduce((sum, bill) => sum + parseFloat(bill.amount), 0).toFixed(2)
 })
+
+// 把正文按【景点名】切成「文本 / 可点景点」片段。用切段渲染而不是 v-html：
+// 正文来自模型输出，直接塞 HTML 就是 XSS 面；这里只产出纯文本节点。
+function contentSegments(item) {
+  const content = item.content || ''
+  const segments = []
+  let last = 0
+  let match
+  POI_SEGMENT_RE.lastIndex = 0
+  while ((match = POI_SEGMENT_RE.exec(content)) !== null) {
+    if (match.index > last) {
+      segments.push({ text: content.slice(last, match.index) })
+    }
+    const name = match[1].trim()
+    segments.push({ text: name, spot: name })
+    last = match.index + match[0].length
+  }
+  if (last < content.length) {
+    segments.push({ text: content.slice(last) })
+  }
+  if (!segments.length) {
+    segments.push({ text: content })
+  }
+  return segments
+}
+
+function openSpot(name) {
+  router.push({ path: '/spot-detail', query: { name } })
+}
 
 // 按天把行程条目里的【地点名】提出来，交给内嵌地图自动串联。
 // computed 缓存保证传给子组件的数组引用稳定，只有真正改动条目时才触发重画。
@@ -330,6 +369,7 @@ function loadItineraryItems(planId) {
           day.items.push({
             id: item.id,
             content: item.content,
+            spotName: item.spotName || '',
             date: formatDate(new Date(item.date)),
             time: item.time
           })
@@ -823,6 +863,16 @@ function formatTime(timeString) {
   margin-left: 12px;
   font-size: 14px;
   color: #303133;
+}
+/* 行程里的景点名：可点开该景点的 AI 详情（介绍/游览建议/站内实拍图） */
+.item-spot {
+  color: #409EFF;
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(64, 158, 255, 0.55);
+}
+.item-spot:hover {
+  color: #1a5f7a;
+  border-bottom-color: #1a5f7a;
 }
 .add-item {
   display: flex;

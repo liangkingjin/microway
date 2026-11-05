@@ -18,13 +18,15 @@ export function bmapStatusOk(status) {
   return status === (window.BMAP_STATUS_SUCCESS ?? 0)
 }
 
-/** 从行程条目里取出 AI 标注的【真实地点名】，保持条目先后顺序 */
+/** 从行程条目里取出景点名：结构化字段 spotName 优先，其次才是 content 里的【】标注 */
 export function extractStops(items) {
   return (items || [])
     .map(item => {
-      const match = POI_PATTERN.exec(item.content || '')
-      return match
-        ? { name: match[1].trim(), time: item.time || '', content: item.content || '' }
+      const explicit = item.spotName ? String(item.spotName).trim() : ''
+      const match = explicit ? null : POI_PATTERN.exec(item.content || '')
+      const name = explicit || (match ? match[1].trim() : '')
+      return name
+        ? { name, time: item.time || '', content: item.content || '' }
         : null
     })
     .filter(Boolean)

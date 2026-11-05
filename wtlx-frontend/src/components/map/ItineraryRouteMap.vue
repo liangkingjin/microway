@@ -9,9 +9,16 @@
       <div v-if="loading" class="itinerary-route__mask">正在串联景点路线…</div>
     </div>
     <div class="itinerary-route__foot">
-      <span v-for="(s, i) in stops" :key="i" class="itinerary-route__stop">
-        <b>{{ i + 1 }}</b>{{ s.name }}
-      </span>
+      <!-- 图例同时也是景点详情的入口：地图上的点位不好点，这里更直接 -->
+      <button
+        v-for="(s, i) in stops"
+        :key="i"
+        type="button"
+        class="itinerary-route__stop"
+        @click="openSpot(s.name)"
+      >
+        <b>{{ i + 1 }}</b>{{ s.name }}<i class="itinerary-route__chev">›</i>
+      </button>
     </div>
   </div>
 </template>
@@ -23,6 +30,7 @@
  * 每张地图持有独立实例，故 id 用模块级自增序号保证唯一。
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { loadMapSdk, renderItineraryRoute } from '../../utils/itineraryRoute'
 
 let seq = 0
@@ -38,6 +46,11 @@ const props = defineProps({
 
 const mapId = 'itinerary-route-map-' + (++seq)
 const loading = ref(true)
+const router = useRouter()
+
+function openSpot(name) {
+  router.push({ path: '/spot-detail', query: { name } })
+}
 const hint = ref('')
 const duration = ref('')
 const distance = ref('')
@@ -168,8 +181,22 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  padding: 2px 6px 2px 2px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
   font-size: 11px;
   color: #5f5e5a;
+  cursor: pointer;
+  font-family: inherit;
+}
+.itinerary-route__stop:hover {
+  background: #ecf5ff;
+  color: var(--wt-color-brand, #409eff);
+}
+.itinerary-route__chev {
+  font-style: normal;
+  color: #c0c4cc;
 }
 .itinerary-route__stop b {
   display: inline-block;
