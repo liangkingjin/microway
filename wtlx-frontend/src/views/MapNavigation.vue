@@ -40,7 +40,7 @@
       <p>总距离：{{ distance }}</p>
     </div>
 
-    <FootBar :active-btn="2" />
+    <FootBar :active-btn="0" />
   </div>
 </template>
 

@@ -1,41 +1,46 @@
 <template>
   <div class="page-container">
-    <!-- 顶部状态栏 -->
-    <div class="status-bar">
-      <div class="weather-widget">
-        <el-icon><Sunny /></el-icon>
-        <span class="weather-text">26°C</span>
+    <!-- 顶部：品牌 + 内容 tab + 发布（去掉写死的假天气） -->
+    <div class="home-header">
+      <div class="hh-brand">微途</div>
+      <div class="hh-tabs">
+        <div class="hh-tab" :class="{ active: activeTab === 'recommend' }" @click="switchTab('recommend')">推荐</div>
+        <div class="hh-tab" :class="{ active: activeTab === 'follow' }" @click="switchTab('follow')">关注</div>
       </div>
-      <div class="status-item" :class="{ active: activeTab === 'follow' }" @click="switchTab('follow')">关注</div>
-      <div class="status-item" :class="{ active: activeTab === 'recommend' }" @click="switchTab('recommend')">推荐</div>
-      <div class="publish-button" @click="toPublishSelect">
-        <el-icon><EditPen /></el-icon> 发布
+      <div class="hh-publish" @click="toPublishSelect">
+        <el-icon><EditPen /></el-icon><span>发布</span>
       </div>
     </div>
 
     <!-- 推荐页 -->
     <div v-if="activeTab === 'recommend'">
-      <div class="swiper-container" style="margin: 8px 0;">
-        <el-carousel :interval="3000" arrow="always" height="160px" style="border-radius: 8px;">
-          <el-carousel-item v-for="item in 4" :key="item" style="border-radius: 8px; overflow: hidden;">
-            <router-link :to="BANNER_PATHS[item - 1]">
-              <img :src="'/imgs/banner/banner' + item + '.png'" :alt="'Banner ' + item" style="width: 100%; height: 100%; object-fit: cover;">
-            </router-link>
-          </el-carousel-item>
-        </el-carousel>
+      <!-- 今日精选：热门游记首条做视觉锚点，替代 4 张自动轮播 banner -->
+      <div v-if="featuredBlog" class="featured" @click="toBlogDetail(featuredBlog)">
+        <div class="featured__cover">
+          <img :src="featuredBlog.img" :alt="featuredBlog.title" class="featured__img">
+          <span class="featured__badge">今日精选</span>
+        </div>
+        <div class="featured__body">
+          <div class="featured__title">{{ featuredBlog.title }}</div>
+          <div class="featured__meta">
+            <img :src="featuredBlog.icon || '/imgs/icons/default-icon.jpg'" alt="" class="featured__avatar">
+            <span>{{ featuredBlog.name }}</span>
+          </div>
+        </div>
       </div>
 
-      <div class="type-list">
-        <div class="type-box" v-for="t in types" :key="t.id" @click="toShopList(t.id, t.name)">
-          <div class="type-view"><img :src="'/imgs/' + t.icon" :alt="t.name"></div>
-          <div class="type-text">{{ t.name }}</div>
+      <!-- 核心入口：固定 4 个，不再从 /shop-type/list 拉 10 宫格 -->
+      <div class="quick-entries">
+        <div class="quick-entry" v-for="entry in QUICK_ENTRIES" :key="entry.path" @click="router.push(entry.path)">
+          <div class="quick-entry__icon"><img :src="entry.icon" :alt="entry.label"></div>
+          <div class="quick-entry__label">{{ entry.label }}</div>
         </div>
       </div>
 
       <div class="section-header">
         <div class="section-title">
           <i class="section-icon"></i>
-          <span>达人攻略</span>
+          <span>为你推荐</span>
         </div>
         <div class="section-more" @click="toMore('blog')">
           查看更多
@@ -45,7 +50,7 @@
 
       <div class="section-content">
         <div class="top-list-container">
-          <div class="recommendation-card" v-for="blog in blogs" :key="blog.id" @click="toBlogDetail(blog)">
+          <div class="recommendation-card" v-for="blog in feedBlogs" :key="blog.id" @click="toBlogDetail(blog)">
             <img :src="blog.img" :alt="blog.title" :title="blog.title" class="card-image">
             <div class="blog-info">
               <div class="blog-title">{{ blog.title }}</div>
@@ -98,7 +103,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import FootBar from '../components/FootBar.vue'
@@ -107,23 +112,25 @@ import { toPlainSummary } from '../utils/blogContent'
 
 const router = useRouter()
 
-// 首页轮播 4 张 banner 对应的精选攻略（原 /page1~4 旧路径）
-const BANNER_PATHS = [
-  '/cherry-blossom-guide',
-  '/hainan-island-guide',
-  '/photo-spots-guide',
-  '/spring-outing-guide'
+// 首页只保留 4 个核心入口：内容消费 → AI 规划 → 计划沉淀 → 内容社区
+const QUICK_ENTRIES = [
+  { label: 'AI 规划', icon: '/imgs/types/人工智能机器人.png', path: '/ai-assistant' },
+  { label: '找攻略', icon: '/imgs/types/找攻略.png', path: '/guides' },
+  { label: '我的计划', icon: '/imgs/types/旅行清单.png', path: '/travel-plan-list' },
+  { label: '看游记', icon: '/imgs/types/看游记.png', path: '/blogs' }
 ]
 
 // 原 created() 中一次性加载
 onMounted(() => {
-  queryTypes()
   loadBlogsCursor()
   window.addEventListener('scroll', onWindowScroll)
 })
 
 const types = ref([])
 const blogs = ref([])
+// 首条热门游记作为「今日精选」大图，其余进入双列信息流，避免重复展示
+const featuredBlog = computed(() => blogs.value[0] || null)
+const feedBlogs = computed(() => blogs.value.slice(1))
 // 达人攻略分页：cursor 由后端下发，前端只透传，不需要理解批次边界
 const feedCursor = ref(null)
 const blogHasMore = ref(true)
@@ -141,27 +148,6 @@ function switchTab(tab) {
   if (tab === 'follow') {
     loadFollowedBlogs()
   }
-}
-
-function queryTypes() {
-  request.get('/shop-type/list')
-    .then(res => {
-      types.value = res.data
-    })
-    .catch(err => {
-      ElMessage.error(err)
-    })
-}
-
-function toShopList(id, name) {  if (id === 4) router.push('/ai-assistant')
-  else if (id === 7) router.push('/group-tour')
-  else if (id === 5) router.push('/local-tour')
-  else if (id === 6) router.push('/check-in')
-  else if (id === 3) router.push('/guides')
-  else if (id === 10) router.push('/blogs')
-  else if (id === 8) router.push('/popular-destinations')
-  else if (id === 2) router.push('/travel-plan-list')
-  else router.push('/shop-list?type=' + id + '&name=' + name)
 }
 
 function toBlogDetail(b) {
@@ -269,68 +255,153 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   padding-bottom: 60px;
 }
-.status-bar {
+.home-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 20px;
-  background-color: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   position: sticky;
   top: 0;
   z-index: 1000;
 }
-.weather-widget {
+.hh-brand {
+  font-size: 17px;
+  font-weight: 600;
+  color: #2c3e50;
+  letter-spacing: 1px;
+}
+.hh-tabs {
+  flex: 1;
   display: flex;
-  align-items: center;
-  font-size: 16px;
-  color: #333;
+  justify-content: center;
+  gap: 20px;
 }
-.weather-widget i {
-  font-size: 20px;
-  color: #f9a825;
-  margin-right: 4px;
-}
-.weather-text {
-  font-size: 14px;
-  font-weight: 500;
-}
-.status-item {
-  font-size: 16px;
-  color: #333;
-  margin: 0 15px;
+.hh-tab {
+  position: relative;
+  font-size: 15px;
+  color: #7a8290;
+  padding: 4px 0;
   cursor: pointer;
-  transition: color 0.3s;
+  transition: color 0.2s;
 }
-.status-item.active {
-  font-weight: bold;
-  color: #3cb7fe;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+.hh-tab.active {
+  color: #0f6e56;
+  font-weight: 600;
 }
-.publish-button {
+.hh-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+  background: #1d9e75;
+  transform: translateX(-50%);
+}
+.hh-publish {
   display: flex;
   align-items: center;
-  background-color: #45a2f3;
-  color: #fff;
+  gap: 4px;
   padding: 6px 12px;
   border-radius: 20px;
+  background: #1d9e75;
+  color: #fff;
+  font-size: 13px;
   cursor: pointer;
-  transition: background-color 0.3s;
 }
-.publish-button i {
-  margin-right: 5px;
+.featured {
+  margin: 12px 12px 0;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
 }
-.publish-button:hover {
-  background-color: #17d1fb;
+.featured__cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #eef1f5;
 }
-.swiper-container {
-  padding: 0 12px;
+.featured__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
+.featured__badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f6e56;
+  font-size: 12px;
+  font-weight: 600;
+}
+.featured__body { padding: 12px 14px 14px; }
+.featured__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.featured__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #8a9099;
+  font-size: 12px;
+}
+.featured__avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.quick-entries {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  padding: 14px 12px;
+  background: #fff;
+}
+.quick-entry { text-align: center; cursor: pointer; }
+.quick-entry__icon {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 6px;
+  border-radius: 50%;
+  background: #eaf7f2;
+  color: #0f6e56;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  transition: transform 0.2s ease;
+}
+.quick-entry__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+  box-sizing: border-box;
+}
+.quick-entry:hover .quick-entry__icon { transform: translateY(-2px); }
+.quick-entry__label { font-size: 12px; color: #4a5058; }
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 15px;
+  margin-top: 10px;
   background: #fff;
 }
 .section-title {
@@ -344,7 +415,7 @@ onBeforeUnmount(() => {
 .section-icon {
   width: 4px;
   height: 16px;
-  background: #409EFF;
+  background: #1d9e75;
   border-radius: 2px;
 }
 .section-more {
@@ -354,63 +425,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   cursor: pointer;
-}
-.type-list {
-  height: 25%;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-around;
-  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
-  background: #fff;
-}
-.type-view {
-  width: 47px;
-  height: 47px;
-  border-radius: 50%;
-  overflow: hidden;
-  margin-bottom: 8px;
-  margin-left: 8px;
-  background: linear-gradient(145deg, #ffffff, #f5f5f5);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  transition: all 0.3s ease;
-  position: relative;
-}
-.type-view::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1) inset;
-}
-.type-view img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scale(0.9);
-  transition: transform 0.3s ease;
-}
-.type-text {
-  font-size: 12px;
-  color: #333;
-  text-align: center;
-  transition: color 0.3s ease;
-}
-.type-box {
-  width: 17%;
-  text-align: center;
-}
-.type-box:hover .type-view {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-}
-.type-box:hover .type-view img {
-  transform: scale(1);
-}
-.type-box:hover .type-text {
-  color: #ff6633;
 }
 .top-list-container {
   display: grid;
@@ -599,18 +613,5 @@ onBeforeUnmount(() => {
 .comment-count i {
   margin-right: 4px;
   font-size: 14px;
-}
-:deep(.el-carousel__arrow) {
-  background: rgba(255,255,255,0.8)!important;
-  color: #666!important;
-}
-:deep(.el-carousel__indicators--inside) {
-  bottom: 12px;
-}
-:deep(.el-carousel__indicator button) {
-  background: rgba(255,255,255,0.4);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
 }
 </style>
