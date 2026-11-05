@@ -59,6 +59,11 @@
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
+    /* 左右各留 60px 给返回/右侧按钮：长标题一律省略，不再溢出盖住按钮 */
+    max-width: calc(100% - 120px);
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 17px;
     font-weight: 600;
     color: #333;

@@ -199,7 +199,12 @@ const currentImage = computed(() =>
 
 const hotelName = computed(() => hotelInfo.value.name || roomDetail.value.shopName || '酒店房型')
 
-const headerTitle = computed(() => hotelName.value)
+// 顶部只放酒店主名：括号里的分店/地标说明属于详情信息，交给下方主信息卡展示。
+// 完整酒店名塞进 HeaderBar 会撑破绝对居中的标题、盖住返回与关闭按钮。
+const headerTitle = computed(() => {
+  const mainName = (hotelName.value || '').split(/[（(]/)[0].trim()
+  return mainName || '房型详情'
+})
 
 // 评分体系：库里的 shop.score 是 0–50，展示时压到 5 分制
 const hotelScore = computed(() => {
