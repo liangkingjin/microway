@@ -236,6 +236,16 @@ export function renderItineraryRoute(options) {
   return enqueue(() => renderItineraryRouteInternal(options))
 }
 
+/** 一个地点距另一个地点的直线距离（公里），足够做可信度判断 */
+function distanceKm(a, b) {
+  const dx = (a.lng - b.lng) * 111 * Math.cos((a.lat * Math.PI) / 180)
+  const dy = (a.lat - b.lat) * 111
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+/** 单日行程合理半径上限：超出说明 POI 名被错误解析到了外地（实测出现过 363 公里的假路线） */
+const MAX_TRUSTED_KM = 150
+
 async function renderItineraryRouteInternal({ map, BMapGL, stops, mode = 'driving' }) {
   // LocalSearch 是按「地图当前城市」检索的：默认中心在北京时，「黄鹤楼」会被匹配成
   // 北京的同名点位，算出 3 公里、9 分钟的假路线（实测踩过）。所以先用地址解析把
@@ -257,6 +267,11 @@ async function renderItineraryRouteInternal({ map, BMapGL, stops, mode = 'drivin
       // 检索不到时退回地址解析，至少拿到一个可用坐标
       const point = await geocodeByAddress(BMapGL, stops[i].name)
       if (point) hit = { point, title: stops[i].name }
+    }
+    // 同一天的景点不该相隔几百公里：超出的多半是把 POI 名当路名解析了，宁可当作未定位
+    if (hit && points.length && distanceKm(points[0].point, hit.point) > MAX_TRUSTED_KM) {
+      failed.push(stops[i].name)
+      continue
     }
     if (hit) points.push({ ...hit, stop: stops[i], seq: i + 1 })
     else failed.push(stops[i].name)
