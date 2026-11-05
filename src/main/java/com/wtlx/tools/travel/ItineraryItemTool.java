@@ -1,6 +1,8 @@
 package com.wtlx.tools.travel;
 
 import com.wtlx.domain.entity.ItineraryItems;
+import com.wtlx.service.IScenicInfoService;
+import com.wtlx.service.impl.ScenicInfoServiceImpl;
 import jakarta.annotation.Resource;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -33,6 +35,9 @@ public class ItineraryItemTool {
 
     @Resource
     private TravelPlanToolSupport support;
+
+    @Resource
+    private IScenicInfoService scenicInfoService;
 
     /**
      * 行程条目入参
@@ -78,6 +83,7 @@ public class ItineraryItemTool {
         }
 
         List<String> failures = new ArrayList<>();
+        List<String> spotNames = new ArrayList<>();
         int saved = 0;
         for (int i = 0; i < inputs.size(); i++) {
             ItineraryItemInput input = inputs.get(i);
@@ -102,9 +108,20 @@ public class ItineraryItemTool {
                     .setContent(input.getContent().trim());
             if (support.itineraries().save(item)) {
                 saved++;
+                // 顺带把这条行程里的【地点】收集起来：计划一生成就把景点资料准备好，
+                // 用户点开详情时直接命中缓存，而不是现场等生成
+                for (String spot : ScenicInfoServiceImpl.extractSpotNames(item.getContent())) {
+                    if (!spotNames.contains(spot)) {
+                        spotNames.add(spot);
+                    }
+                }
             } else {
                 failures.add(label + "：数据库写入失败");
             }
+        }
+
+        if (!spotNames.isEmpty()) {
+            scenicInfoService.pregenerate(spotNames);
         }
 
         String summary = "已为计划ID=" + planId + " 添加 " + saved + " 条行程。";

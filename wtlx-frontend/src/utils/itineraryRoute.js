@@ -66,6 +66,26 @@ function geocodePoi(map, BMapGL, name, timeout = 6000) {
   })
 }
 
+/** 地址解析（不依赖地图当前城市），用于锚定行程所在城市 / LocalSearch 失败的兜底 */
+function geocodeByAddress(BMapGL, name, timeout = 6000) {
+  return new Promise((resolve) => {
+    let settled = false
+    const done = (point) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(point || null)
+    }
+    const timer = setTimeout(() => done(null), timeout)
+    try {
+      const geocoder = new BMapGL.Geocoder()
+      geocoder.getPoint(name, (point) => done(point))
+    } catch (e) {
+      done(null)
+    }
+  })
+}
+
 function addNumberedMarkers(map, BMapGL, points) {
   points.forEach((p) => {
     const marker = new BMapGL.Marker(p.point)
@@ -83,27 +103,161 @@ function addNumberedMarkers(map, BMapGL, points) {
       fontSize: '12px'
     })
     map.addOverlay(label)
-    // 行程文案来自模型输出，进 InfoWindow 前必须转义
+    // 行程文案来自模型输出，进 InfoWindow 前必须转义；链接走 hash 路由，直接给 a[href] 即可
     const html = '<div style="font-size:13px;line-height:1.6"><b>'
       + escapeHtml(p.seq + '. ' + p.stop.name) + '</b><br/>'
       + escapeHtml(p.stop.time) + '<br/>'
-      + escapeHtml(p.stop.content) + '</div>'
-    const info = new BMapGL.InfoWindow(html, { width: 230 })
+      + escapeHtml(p.stop.content) + '<br/>'
+      + '<a href="#/spot-detail?name=' + encodeURIComponent(p.stop.name)
+      + '" style="display:inline-block;margin-top:6px;color:#409eff;text-decoration:none">'
+      + '查看景点详情 ›</a></div>'
+    const info = new BMapGL.InfoWindow(html, { width: 240 })
     marker.addEventListener('click', () => map.openInfoWindow(info, p.point))
   })
 }
 
+/** 百度单次驾车最多 10 个途经点；超出时按顺序切成多段连续路线，段与段共享端点 */
+const MAX_WAYPOINTS = 10
+
+function splitLegs(points) {
+  const legs = []
+  let start = 0
+  while (start < points.length - 1) {
+    const end = Math.min(start + MAX_WAYPOINTS + 1, points.length - 1)
+    legs.push(points.slice(start, end + 1))
+    start = end
+  }
+  return legs
+}
+
+/** 百度返回「1小时20分钟」「46分钟」，按字符串解析再累加，避免猜 false 分支的数值单位 */
+function parseDurationToMinutes(text) {
+  const source = String(text || '')
+  const hours = /(\d+)\s*小时/.exec(source)
+  const minutes = /(\d+)\s*分钟/.exec(source)
+  let total = 0
+  if (hours) total += Number(hours[1]) * 60
+  if (minutes) total += Number(minutes[1])
+  return total
+}
+
+/** 百度返回「16.2公里」「800米」 */
+function parseDistanceToMeters(text) {
+  const source = String(text || '')
+  const km = /([\d.]+)\s*公里/.exec(source)
+  if (km) return Number(km[1]) * 1000
+  const m = /([\d.]+)\s*米/.exec(source)
+  if (m) return Number(m[1])
+  return 0
+}
+
+function searchDrivingLeg(map, BMapGL, leg) {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (value) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(value)
+    }
+    const timer = setTimeout(() => finish(null), 15000)
+    const driving = new BMapGL.DrivingRoute(map, {
+      renderOptions: { map, autoViewport: false },
+      onSearchComplete: (results) => {
+        if (!bmapStatusOk(driving.getStatus())) {
+          finish(null)
+          return
+        }
+        const plan = results.getPlan(0)
+        if (!plan) {
+          finish(null)
+          return
+        }
+        finish({
+          minutes: parseDurationToMinutes(plan.getDuration(true)),
+          meters: parseDistanceToMeters(plan.getDistance(true))
+        })
+      }
+    })
+    const mids = leg.slice(1, -1).map(p => p.point)
+    driving.search(leg[0].point, leg[leg.length - 1].point, { waypoints: mids })
+  })
+}
+
+function formatDuration(minutes) {
+  const total = Math.max(0, Math.round(minutes))
+  if (total < 60) return total + '分钟'
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return m === 0 ? h + '小时' : h + '小时' + m + '分钟'
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return Math.round(meters) + '米'
+  return (meters / 1000).toFixed(1) + '公里'
+}
+
+/** 视野：先把中心落到第一个点（同步生效），再用 setViewport 尝试把全部点位框进来 */
+function fitPoints(map, BMapGL, points) {
+  if (!points || !points.length) return
+  map.centerAndZoom(points[0].point, 13)
+  const all = points.map(p => p.point)
+  if (typeof map.setViewport === 'function') {
+    map.setViewport(all)
+  }
+}
+
 /**
- * 把一天（或一段）的地点串成真实道路路线并画到地图上。
+ * 全局串行队列：一个页面可能同时有「总体路线」和多天「当日路线」多张地图，
+ * 每张都要做 N 次 POI 检索 + 路线规划。百度 JSAPI 个人版按 QPS 限流，
+ * 并发一高就整批返回失败（表现为"可定位地点不足 2 个"），因此同一时刻只放一张地图去请求。
+ * shortcut: 前端串行 + 250ms 间隔；若要支持同屏大量地图，需改用服务端 Web 服务 API 并申请更高配额。
+ */
+let routeQueue = Promise.resolve()
+
+function enqueue(task) {
+  const run = routeQueue.then(task, task)
+  routeQueue = run.catch(() => {})
+  return run
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 把一天（或一整趟行程）的地点串成真实道路路线并画到地图上。
+ * 超过 10 个途经点时自动分段串联，仍是一条完整动线。
  *
  * @returns {Promise<{ok:boolean, reason?:string, points:Array, failed:string[],
  *                    duration?:string, distance?:string, truncated?:boolean, segments?:number}>}
  */
-export async function renderItineraryRoute({ map, BMapGL, stops, mode = 'driving' }) {
+export function renderItineraryRoute(options) {
+  return enqueue(() => renderItineraryRouteInternal(options))
+}
+
+async function renderItineraryRouteInternal({ map, BMapGL, stops, mode = 'driving' }) {
+  // LocalSearch 是按「地图当前城市」检索的：默认中心在北京时，「黄鹤楼」会被匹配成
+  // 北京的同名点位，算出 3 公里、9 分钟的假路线（实测踩过）。所以先用地址解析把
+  // 视野锚到首个景点所在城市，再逐个检索，命中城市才正确。
+  const anchor = await geocodeByAddress(BMapGL, stops[0].name)
+  if (anchor) {
+    map.centerAndZoom(anchor, 12)
+  }
+
   const points = []
   const failed = []
   for (let i = 0; i < stops.length; i++) {
-    const hit = await geocodePoi(map, BMapGL, stops[i].name)
+    if (i > 0) {
+      // 相邻两次检索之间留间隔，稳定命中 QPS 限制以内
+      await sleep(250)
+    }
+    let hit = await geocodePoi(map, BMapGL, stops[i].name)
+    if (!hit) {
+      // 检索不到时退回地址解析，至少拿到一个可用坐标
+      const point = await geocodeByAddress(BMapGL, stops[i].name)
+      if (point) hit = { point, title: stops[i].name }
+    }
     if (hit) points.push({ ...hit, stop: stops[i], seq: i + 1 })
     else failed.push(stops[i].name)
   }
@@ -117,49 +271,35 @@ export async function renderItineraryRoute({ map, BMapGL, stops, mode = 'driving
     // 步行不支持途经点，逐段规划真实步行路线
     for (let i = 0; i < points.length - 1; i++) {
       const walk = new BMapGL.WalkingRoute(map, {
-        renderOptions: { map, autoViewport: i === 0 }
+        renderOptions: { map, autoViewport: false }
       })
       walk.search(points[i].point, points[i + 1].point)
     }
+    fitPoints(map, BMapGL, points)
     return { ok: true, points, failed, segments: points.length - 1 }
   }
 
-  // 驾车支持途经点，一次调用把整天的景点串成真实道路
-  const first = points[0].point
-  const last = points[points.length - 1].point
-  let mids = points.slice(1, -1).map(p => p.point)
-  let truncated = false
-  if (mids.length > 10) {
-    mids = mids.slice(0, 10)
-    truncated = true
+  const legs = splitLegs(points)
+  const legResults = await Promise.all(legs.map(leg => searchDrivingLeg(map, BMapGL, leg)))
+  const okLegs = legResults.filter(Boolean)
+  // 单段失败不影响其余段已画出的路线，但完全无结果要如实报失败
+  if (okLegs.length === 0) {
+    return { ok: false, reason: '路线规划失败，请稍后重试', points, failed }
   }
+  const minutes = okLegs.reduce((sum, r) => sum + r.minutes, 0)
+  const meters = okLegs.reduce((sum, r) => sum + r.meters, 0)
 
-  const result = await new Promise((resolve) => {
-    let settled = false
-    const finish = (value) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve(value)
-    }
-    const timer = setTimeout(() => finish({ ok: false, reason: '路线规划超时' }), 12000)
-    const driving = new BMapGL.DrivingRoute(map, {
-      renderOptions: { map, autoViewport: true },
-      onSearchComplete: (results) => {
-        if (!bmapStatusOk(driving.getStatus())) {
-          finish({ ok: false, reason: '路线规划失败' })
-          return
-        }
-        const plan = results.getPlan(0)
-        if (!plan) {
-          finish({ ok: false, reason: '未找到可用路线' })
-          return
-        }
-        finish({ ok: true, duration: plan.getDuration(true), distance: plan.getDistance(true) })
-      }
-    })
-    driving.search(first, last, { waypoints: mids })
-  })
+  // 多段各自 autoViewport 会互相覆盖视野，统一在最后把全部点位框进来
+  fitPoints(map, BMapGL, points)
 
-  return { ...result, points, failed, truncated }
+  return {
+    ok: true,
+    points,
+    failed,
+    duration: minutes > 0 ? formatDuration(minutes) : undefined,
+    distance: meters > 0 ? formatDistance(meters) : undefined,
+    segments: legs.length,
+    truncated: legResults.some(r => r === null)
+  }
 }
+

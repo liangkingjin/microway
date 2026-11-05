@@ -8,6 +8,14 @@
         <div class="duration-tag">{{ planDetail.duration }}</div>
       </div>
 
+      <!-- 总体路线地图：全部行程天的景点按游览顺序串成一条完整动线，点位可点开 AI 详情 -->
+      <ItineraryRouteMap
+        v-if="allStops.length >= 2"
+        :stops="allStops"
+        title="总体路线"
+        :height="230"
+      />
+
       <div class="tabs">
         <div class="tab-item" :class="{ active: activeTab === 'itinerary' }" @click="activeTab = 'itinerary'">行程</div>
         <div class="tab-item" :class="{ active: activeTab === 'expenses' }" @click="activeTab = 'expenses'">旅行账单</div>
@@ -255,6 +263,17 @@ const routeStopsByDay = computed(() => {
     result[day.date] = extractStops(day.items)
   })
   return result
+})
+
+// 总体路线：把各天的标注景点按 天→时间 的游览顺序拼成一条完整动线
+const allStops = computed(() => {
+  const list = []
+  days.value.forEach((day, index) => {
+    (routeStopsByDay.value[day.date] || []).forEach(stop => {
+      list.push({ ...stop, dayIndex: index + 1, dayDate: day.date })
+    })
+  })
+  return list
 })
 
 onMounted(() => {

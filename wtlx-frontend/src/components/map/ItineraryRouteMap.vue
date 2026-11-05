@@ -1,10 +1,10 @@
 <template>
   <div class="itinerary-route">
     <div class="itinerary-route__head">
-      <span class="itinerary-route__title">当日路线</span>
+      <span class="itinerary-route__title">{{ title }}</span>
       <span class="itinerary-route__meta">{{ summary }}</span>
     </div>
-    <div class="itinerary-route__canvas-wrap">
+    <div class="itinerary-route__canvas-wrap" :style="{ height: height + 'px' }">
       <div :id="mapId" class="itinerary-route__canvas"></div>
       <div v-if="loading" class="itinerary-route__mask">正在串联景点路线…</div>
     </div>
@@ -29,7 +29,11 @@ let seq = 0
 
 const props = defineProps({
   stops: { type: Array, default: () => [] },
-  mode: { type: String, default: 'driving' }
+  mode: { type: String, default: 'driving' },
+  /** 卡片标题：当天用「当日路线」，整趟用「总体路线」 */
+  title: { type: String, default: '当日路线' },
+  /** 画布高度（px）：总体路线可以给得比单天大一些 */
+  height: { type: Number, default: 210 }
 })
 
 const mapId = 'itinerary-route-map-' + (++seq)

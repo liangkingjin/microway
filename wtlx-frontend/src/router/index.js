@@ -28,6 +28,7 @@ const routes = [
   { path: '/trip-itinerary', name: 'TripItinerary', component: () => import('../views/TripItinerary.vue'), meta: { title: '旅行规划' } },
   { path: '/travel-plan-list', name: 'TravelPlanList', component: () => import('../views/TravelPlanList.vue'), meta: { title: '我的旅行计划' } },
   { path: '/travel-plan-detail', name: 'TravelPlanDetail', component: () => import('../views/TravelPlanDetail.vue'), meta: { title: '计划详情' } },
+  { path: '/spot-detail', name: 'SpotDetail', component: () => import('../views/SpotDetail.vue'), meta: { title: '景点详情' } },
   { path: '/map-navigation', name: 'MapNavigation', component: () => import('../views/MapNavigation.vue'), meta: { title: '地图导航' } },
   { path: '/local-tour', name: 'LocalTour', component: () => import('../views/LocalTour.vue'), meta: { title: '当地游' } },
   { path: '/group-tour', name: 'GroupTour', component: () => import('../views/GroupTour.vue'), meta: { title: '组团游' } },
