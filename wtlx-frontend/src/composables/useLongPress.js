@@ -1,4 +1,4 @@
-import { onScopeDispose } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 
 /**
  * 长按手势（鼠标 + 触摸双通道）
@@ -9,6 +9,8 @@ import { onScopeDispose } from 'vue'
  */
 export function useLongPress(handler, delay = 800) {
   let timer = null
+  // 长按触发后松手，浏览器仍会补发一次 click；调用方用此标记抑制「误打开详情」
+  const justTriggered = ref(false)
 
   function clear() {
     if (timer) {
@@ -19,8 +21,10 @@ export function useLongPress(handler, delay = 800) {
 
   function start() {
     clear()
+    justTriggered.value = false
     timer = setTimeout(() => {
       timer = null
+      justTriggered.value = true
       handler()
     }, delay)
   }
@@ -31,6 +35,7 @@ export function useLongPress(handler, delay = 800) {
   return {
     start,
     clear,
+    justTriggered,
     handlers: {
       touchstart: start,
       touchend: clear,

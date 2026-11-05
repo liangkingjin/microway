@@ -1,5 +1,5 @@
 <template>
-  <div class="wt-card wt-card--interactive profile-blog-card" v-on="longPress.handlers">
+  <div class="wt-card wt-card--interactive profile-blog-card" v-on="handlers" @click="onClick">
     <div class="profile-blog-card__cover">
       <img :src="cover" :alt="blog.title">
     </div>
@@ -25,15 +25,25 @@ import { useLongPress } from '../../composables/useLongPress'
 const props = defineProps({
   blog: { type: Object, required: true }
 })
-const emit = defineEmits(['long-press'])
+const emit = defineEmits(['long-press', 'open'])
 
-const longPress = useLongPress(() => emit('long-press', props.blog))
+// 长按删除 / 点击打开详情共存：长按触发后的那次 click 不跳转
+const { handlers, justTriggered } = useLongPress(() => emit('long-press', props.blog))
+
+function onClick() {
+  if (justTriggered.value) {
+    justTriggered.value = false
+    return
+  }
+  emit('open', props.blog)
+}
 
 const cover = computed(() => (props.blog.images || '').split(',')[0])
 </script>
 
 <style scoped>
 .profile-blog-card {
+  cursor: pointer;
   display: flex;
   align-items: stretch;
   overflow: hidden;

@@ -54,6 +54,7 @@
             :key="blog.id"
             :blog="blog"
             @long-press="showDeleteConfirm"
+          @open="toBlogDetail"
           />
         </el-tab-pane>
       </el-tabs>
@@ -118,6 +119,10 @@ async function loadUser() {
     // 未登录：与原有行为一致，直接回登录页
     router.push('/login')
   }
+}
+
+function toBlogDetail(blog) {
+  router.push('/blog-detail?id=' + blog.id)
 }
 
 function toEdit() {

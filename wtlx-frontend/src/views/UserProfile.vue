@@ -15,7 +15,7 @@
     <div class="content">
       <el-tabs v-model="activeName" @tab-click="handleClick">
         <el-tab-pane label="游记" name="1">
-          <div v-for="b in blogs" :key="b.id" class="blog-item">
+          <div v-for="b in blogs" :key="b.id" class="blog-item" @click="toBlogDetail(b)">
             <div class="blog-img"><img :src="b.images.split(',')[0]" alt=""></div>
             <div class="blog-info">
               <div class="blog-title" v-html="b.title"></div>
@@ -72,6 +72,10 @@ onMounted(() => {
   queryUser()
   queryLoginUser()
 })
+
+function toBlogDetail(blog) {
+  router.push('/blog-detail?id=' + blog.id)
+}
 
 function queryBlogs() {
   request.get('/blog/of/user', { params: { id: user.value.id, current: 1 } })
@@ -202,6 +206,7 @@ function toOtherInfo(id) {
   line-height: 40px;
 }
 .blog-item {
+  cursor: pointer;
   background: #fff;
   border-radius: 12px;
   overflow: hidden;
