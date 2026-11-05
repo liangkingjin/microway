@@ -2,6 +2,18 @@
   <div class="wt-card wt-card--interactive profile-blog-card" v-on="handlers" @click="onClick">
     <div class="profile-blog-card__cover">
       <img :src="cover" :alt="blog.title">
+      <!-- 显式删除入口：长按虽然也能删，但没人会想到去长按，入口必须可见 -->
+      <button
+        type="button"
+        class="profile-blog-card__more"
+        aria-label="删除这篇游记"
+        title="删除这篇游记"
+        @mousedown.stop
+        @touchstart.stop
+        @click.stop="emit('delete', blog)"
+      >
+        <el-icon><Delete /></el-icon>
+      </button>
     </div>
 
     <div class="profile-blog-card__body">
@@ -18,14 +30,14 @@
 
 <script setup>
 import { computed } from 'vue'
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { ChatDotRound, Delete } from '@element-plus/icons-vue'
 import { useLongPress } from '../../composables/useLongPress'
 
-// 游记卡片：长按触发删除确认（手势逻辑抽到 useLongPress，事件上抛给父级）
+// 游记卡片：右上角按钮 / 长按都可触发删除确认（手势逻辑抽到 useLongPress，事件上抛给父级）
 const props = defineProps({
   blog: { type: Object, required: true }
 })
-const emit = defineEmits(['long-press', 'open'])
+const emit = defineEmits(['long-press', 'open', 'delete'])
 
 // 长按删除 / 点击打开详情共存：长按触发后的那次 click 不跳转
 const { handlers, justTriggered } = useLongPress(() => emit('long-press', props.blog))
@@ -68,6 +80,29 @@ const cover = computed(() => (props.blog.images || '').split(',')[0])
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* 删除按钮：压在封面右上角，半透明底保证任何图片上都看得见 */
+.profile-blog-card__more {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.38);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.profile-blog-card__more:hover {
+  background: rgba(220, 38, 38, 0.9);
 }
 .profile-blog-card__body {
   flex: 1 1 auto;

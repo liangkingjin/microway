@@ -54,8 +54,14 @@
             :key="blog.id"
             :blog="blog"
             @long-press="showDeleteConfirm"
-          @open="toBlogDetail"
+            @delete="showDeleteConfirm"
+            @open="toBlogDetail"
           />
+          <EmptyState v-if="!blogs.length" text="还没有发布游记">
+            <template #icon>
+              <el-icon class="wt-empty__icon"><Tickets /></el-icon>
+            </template>
+          </EmptyState>
         </el-tab-pane>
       </el-tabs>
     </div>
