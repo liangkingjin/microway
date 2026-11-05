@@ -266,35 +266,89 @@ function distanceKm(a, b) {
 /** 单日行程合理半径上限：超出说明 POI 名被错误解析到了外地（实测出现过 363 公里的假路线） */
 const MAX_TRUSTED_KM = 150
 
+/**
+ * POI 坐标本地缓存：景点坐标是稳定的，没必要每次打开计划都重新检索一遍。
+ * 缓存后再次打开同一份行程，只剩 1 次路线规划请求（省掉 1 次地址解析 + N 次 POI 检索，
+ * 以及它们之间为避开 QPS 限流而加的 250ms 间隔）。14 天过期，避免 POI 搬迁后一直用旧坐标。
+ */
+const POI_CACHE_PREFIX = 'wt:poi:'
+const POI_CACHE_TTL = 14 * 24 * 60 * 60 * 1000
+
+function readCachedPoint(name) {
+  try {
+    const raw = localStorage.getItem(POI_CACHE_PREFIX + name)
+    if (!raw) return null
+    const hit = JSON.parse(raw)
+    if (!hit || typeof hit.lng !== 'number' || typeof hit.lat !== 'number') return null
+    if (Date.now() - hit.ts > POI_CACHE_TTL) {
+      localStorage.removeItem(POI_CACHE_PREFIX + name)
+      return null
+    }
+    return hit
+  } catch (e) {
+    return null
+  }
+}
+
+function writeCachedPoint(name, point) {
+  try {
+    if (!point || typeof point.lng !== 'number') return
+    localStorage.setItem(POI_CACHE_PREFIX + name, JSON.stringify({
+      lng: point.lng,
+      lat: point.lat,
+      ts: Date.now()
+    }))
+  } catch (e) {
+    // 隐私模式 / 配额满：缓存写不进去不影响主流程
+  }
+}
+
 async function renderItineraryRouteInternal({ map, BMapGL, stops, mode = 'driving' }) {
   // LocalSearch 是按「地图当前城市」检索的：默认中心在北京时，「黄鹤楼」会被匹配成
-  // 北京的同名点位，算出 3 公里、9 分钟的假路线（实测踩过）。所以先用地址解析把
-  // 视野锚到首个景点所在城市，再逐个检索，命中城市才正确。
-  const anchor = await geocodeByAddress(BMapGL, stops[0].name)
-  if (anchor) {
-    map.centerAndZoom(anchor, 12)
+  // 北京的同名点位，算出 3 公里、9 分钟的假路线（实测踩过）。所以先把视野锚到首个
+  // 景点所在城市；首点有缓存坐标时直接用，连地址解析都省了。
+  const firstCached = readCachedPoint(stops[0].name)
+  if (firstCached) {
+    map.centerAndZoom(new BMapGL.Point(firstCached.lng, firstCached.lat), 12)
+  } else {
+    const anchor = await geocodeByAddress(BMapGL, stops[0].name)
+    if (anchor) {
+      map.centerAndZoom(anchor, 12)
+    }
   }
 
   const points = []
   const failed = []
   for (let i = 0; i < stops.length; i++) {
-    if (i > 0) {
-      // 相邻两次检索之间留间隔，稳定命中 QPS 限制以内
-      await sleep(250)
+    const name = stops[i].name
+    let hit = null
+
+    const cached = readCachedPoint(name)
+    if (cached) {
+      hit = { point: new BMapGL.Point(cached.lng, cached.lat), title: name }
+    } else {
+      if (i > 0) {
+        // 只有真正要发检索请求时才等待，缓存命中不浪费这 250ms
+        await sleep(250)
+      }
+      hit = await geocodePoi(map, BMapGL, name)
+      if (!hit) {
+        // 检索不到时退回地址解析，至少拿到一个可用坐标
+        const point = await geocodeByAddress(BMapGL, name)
+        if (point) hit = { point, title: name }
+      }
+      if (hit) {
+        writeCachedPoint(name, hit.point)
+      }
     }
-    let hit = await geocodePoi(map, BMapGL, stops[i].name)
-    if (!hit) {
-      // 检索不到时退回地址解析，至少拿到一个可用坐标
-      const point = await geocodeByAddress(BMapGL, stops[i].name)
-      if (point) hit = { point, title: stops[i].name }
-    }
+
     // 同一天的景点不该相隔几百公里：超出的多半是把 POI 名当路名解析了，宁可当作未定位
     if (hit && points.length && distanceKm(points[0].point, hit.point) > MAX_TRUSTED_KM) {
-      failed.push(stops[i].name)
+      failed.push(name)
       continue
     }
     if (hit) points.push({ ...hit, stop: stops[i], seq: i + 1 })
-    else failed.push(stops[i].name)
+    else failed.push(name)
   }
   if (points.length < 2) {
     return { ok: false, reason: '可定位地点不足 2 个', points, failed }
