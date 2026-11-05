@@ -23,7 +23,13 @@
             </div>
           </div>
 
-          <div v-show="!day.isCollapsed" class="day-content">
+          <!-- 折叠时不渲染地图：display:none 的容器宽高为 0，百度地图算不出正确视野 -->
+          <div v-if="!day.isCollapsed" class="day-content">
+            <!-- 路线属于当天行程本身：有 >=2 个带【地点名】标注的条目就自动串联，无需点击 -->
+            <ItineraryRouteMap
+              v-if="(routeStopsByDay[day.date] || []).length >= 2"
+              :stops="routeStopsByDay[day.date]"
+            />
             <div
               v-for="item in day.items"
               :key="item.id"
@@ -190,8 +196,10 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
+import ItineraryRouteMap from '../components/map/ItineraryRouteMap.vue'
 import request from '../api/request'
 import { getUrlParam } from '../utils/index.js'
+import { extractStops } from '../utils/itineraryRoute'
 
 const activeTab = ref('itinerary')
 const planDetail = ref(null)
@@ -237,6 +245,16 @@ const expenseTypes = {
 
 const totalExpenses = computed(() => {
   return bills.value.reduce((sum, bill) => sum + parseFloat(bill.amount), 0).toFixed(2)
+})
+
+// 按天把行程条目里的【地点名】提出来，交给内嵌地图自动串联。
+// computed 缓存保证传给子组件的数组引用稳定，只有真正改动条目时才触发重画。
+const routeStopsByDay = computed(() => {
+  const result = {}
+  days.value.forEach(day => {
+    result[day.date] = extractStops(day.items)
+  })
+  return result
 })
 
 onMounted(() => {

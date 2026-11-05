@@ -37,13 +37,7 @@
         </div>
       </div>
 
-      <el-button
-        type="primary"
-        class="plan-panel__btn"
-        :loading="routeLoading"
-        :disabled="dayStops.length < 2"
-        @click="drawPlanRoute"
-      >在地图上串联路线</el-button>
+      <!-- 路线在进入页面、切换计划/日期/交通方式时自动重画，不提供手动串联入口 -->
       <div v-if="planHint" class="plan-panel__hint">{{ planHint }}</div>
       <div v-if="!plans.length" class="plan-panel__empty">
         还没有旅行计划，先让 AI 助手生成一份吧
@@ -93,11 +87,9 @@ import { ElMessage } from 'element-plus'
 import HeaderBar from '../components/HeaderBar.vue'
 import FootBar from '../components/FootBar.vue'
 import request from '../api/request'
-import { loadBMapGL } from '../utils/bmap'
-
-const BMAP_AK = 'd3SExcYB3XNkA5KXvqdpAvsAilJxiNKx'
-// AI 在行程条目的 content 开头标注真实 POI，例如「【黄鹤楼】登楼游览约 1.5 小时」
-const POI_RE = /【([^】]{1,40})】/
+import {
+  loadMapSdk, extractStops, renderItineraryRoute, bmapStatusOk, POI_PATTERN
+} from '../utils/itineraryRoute'
 
 const route = useRoute()
 const router = useRouter()
@@ -123,17 +115,14 @@ const mapReady = ref(false)
 let map = null
 let transit = null
 
-// 行程内容里由 AI 标注的【真实地点名】，按天取出后交给百度地图解析坐标
-const dayStops = computed(() => itinerary.value
-  .filter(item => String(item.date || '') === activeDay.value)
-  .map(item => {
-    const match = POI_RE.exec(item.content || '')
-    return match ? { name: match[1].trim(), time: item.time || '', content: item.content || '' } : null
-  })
-  .filter(Boolean))
+// 行程内容里由 AI 标注的【真实地点名】，按天取出后交给共享路线工具串联
+const dayStops = computed(() => extractStops(
+  itinerary.value.filter(item => String(item.date || '') === activeDay.value)
+))
 
 const planHint = computed(() => {
   if (!plans.value.length) return ''
+  if (routeLoading.value) return '正在自动串联当天景点路线…'
   if (statusHint.value) return statusHint.value
   if (dayStops.value.length < 2) return '当天不足 2 个可定位地点；旧计划没有地点标注，让 AI 重新生成一份即可自动串联路线'
   return ''
@@ -143,19 +132,9 @@ function goAiPlanner() {
   router.push('/ai-assistant')
 }
 
-function statusOk(status) {
-  return status === (window.BMAP_STATUS_SUCCESS ?? 0)
-}
-
-function escapeHtml(value) {
-  return String(value || '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[ch]))
-}
-
 async function ensureBMapGL() {
   try {
-    return await loadBMapGL(BMAP_AK)
+    return await loadMapSdk()
   } catch (e) {
     console.error('[Map]', e)
     ElMessage.error('地图加载失败，请检查网络或 AK 配置')
@@ -170,7 +149,7 @@ async function initMap() {
   mapReady.value = true
   const geolocation = new BMapGL.Geolocation()
   geolocation.getCurrentPosition((r) => {
-    if (statusOk(geolocation.getStatus())) {
+    if (bmapStatusOk(geolocation.getStatus())) {
       map.centerAndZoom(r.point, 12)
       map.addOverlay(new BMapGL.Marker(r.point))
     } else {
@@ -203,7 +182,9 @@ async function initAutocomplete() {
 
 watch(mode, (value) => {
   if (value === 'free') nextTick(initAutocomplete)
+  else nextTick(drawPlanRoute)
 })
+watch(travelMode, () => nextTick(drawPlanRoute))
 
 // 换天后旧的「已串联 N 个地点」不再成立，让 computed 回落到常态提示。
 // 这里显式清理而不用 watch：自动画图会在同一轮微任务里写入过程提示，
@@ -211,6 +192,7 @@ watch(mode, (value) => {
 function selectDay(day) {
   activeDay.value = day
   statusHint.value = ''
+  drawPlanRoute()
 }
 
 async function loadPlans() {
@@ -244,8 +226,10 @@ async function loadItinerary(planId) {
     days.value = [...new Set(list.map(i => String(i.date || '')).filter(Boolean))]
     // 自动画图时优先落在真正有 >=2 个地点标注的那天，而不是无脑选第一天
     const usable = days.value.find(d => list.filter(i =>
-      String(i.date || '') === d && POI_RE.test(i.content || '')).length >= 2)
+      String(i.date || '') === d && POI_PATTERN.test(i.content || '')).length >= 2)
     activeDay.value = usable || days.value[0] || ''
+    // 行程数据一到就画路线，页面打开即成品，不需要用户再操作
+    nextTick(drawPlanRoute)
   } catch (e) {
     statusHint.value = '读取行程失败'
   }
@@ -255,144 +239,52 @@ function onPlanChange(id) {
   loadItinerary(id)
 }
 
-// 把地点名解析为百度坐标（bd09ll），返回 null 表示该地点未定位
-function geocodePoi(name) {
-  return new Promise((resolve) => {
-    const BMapGL = window.BMapGL
-    let settled = false
-    const done = (hit) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve(hit)
-    }
-    // LocalSearch 失败时不一定回调；不设超时会让「正在解析坐标…」永久卡住
-    const timer = setTimeout(() => done(null), 6000)
-    try {
-      const search = new BMapGL.LocalSearch(map, {
-        onSearchComplete: (results) => {
-          try {
-            const poi = results && results.getPoi(0)
-            done(poi && poi.point ? { point: poi.point, title: poi.title || name } : null)
-          } catch (e) {
-            done(null)
-          }
-        }
-      })
-      // forceLocal:false 允许跳出地图当前城市，否则异地行程（人在武汉、计划在北京）会搜不到 POI
-      search.search(name, { forceLocal: false })
-    } catch (e) {
-      done(null)
-    }
-  })
-}
-
+// 进入页面 / 切换计划、日期、交通方式时自动串联，不需要用户点任何按钮
+let drawToken = 0
 async function drawPlanRoute() {
-  if (dayStops.value.length < 2) {
-    ElMessage.warning('至少需要 2 个带地点标注的行程点')
-    return
-  }
-  if (!map) {
-    ElMessage.warning('地图尚未加载完成，请稍候')
-    return
-  }
+  const token = ++drawToken
+  if (!map || mode.value !== 'plan' || dayStops.value.length < 2) return
 
   routeLoading.value = true
-  statusHint.value = '正在解析地点坐标…'
+  statusHint.value = ''
   showResult.value = false
+  duration.value = ''
+  distance.value = ''
   map.clearOverlays()
-  const BMapGL = window.BMapGL
-
-  const stops = dayStops.value
-  const points = []
-  const failed = []
-  for (let i = 0; i < stops.length; i++) {
-    const hit = await geocodePoi(stops[i].name)
-    if (hit) points.push({ ...hit, stop: stops[i], seq: i + 1 })
-    else failed.push(stops[i].name)
-  }
-  if (points.length < 2) {
-    routeLoading.value = false
-    statusHint.value = '地点解析失败，请检查行程里的地点名称'
-    return
-  }
-
-  // 编号标记 + 点击气泡（行程文案来自模型，必须转义后再进 InfoWindow）
-  points.forEach((p) => {
-    const marker = new BMapGL.Marker(p.point)
-    map.addOverlay(marker)
-    const label = new BMapGL.Label(String(p.seq), {
-      position: p.point,
-      offset: new BMapGL.Size(6, -6)
+  try {
+    const res = await renderItineraryRoute({
+      map,
+      BMapGL: window.BMapGL,
+      stops: dayStops.value,
+      mode: travelMode.value
     })
-    label.setStyle({
-      border: 'none',
-      background: '#409eff',
-      color: '#fff',
-      borderRadius: '10px',
-      padding: '1px 6px',
-      fontSize: '12px'
-    })
-    map.addOverlay(label)
-    const html = '<div style="font-size:13px;line-height:1.6"><b>'
-      + escapeHtml(p.seq + '. ' + p.stop.name) + '</b><br/>'
-      + escapeHtml(p.stop.time) + '<br/>'
-      + escapeHtml(p.stop.content) + '</div>'
-    const info = new BMapGL.InfoWindow(html, { width: 230 })
-    marker.addEventListener('click', () => map.openInfoWindow(info, p.point))
-  })
-
-  if (travelMode.value === 'walking') {
-    // 步行不支持途经点，逐段规划真实步行路线
-    for (let i = 0; i < points.length - 1; i++) {
-      const walk = new BMapGL.WalkingRoute(map, {
-        renderOptions: { map: map, autoViewport: i === 0 }
-      })
-      walk.search(points[i].point, points[i + 1].point)
+    // 期间又切了计划/日期时丢弃过期结果，避免旧路线盖到新行程上
+    if (token !== drawToken) return
+    if (!res.ok) {
+      statusHint.value = res.reason || '路线生成失败'
+      return
     }
-    showResult.value = false
-    statusHint.value = '已按步行逐段规划 ' + (points.length - 1) + ' 段路线'
-  } else {
-    // 驾车支持最多 10 个途经点，一次调用把整天的景点串成真实道路
-    const first = points[0].point
-    const last = points[points.length - 1].point
-    let mids = points.slice(1, -1).map(p => p.point)
-    let truncated = false
-    if (mids.length > 10) {
-      mids = mids.slice(0, 10)
-      truncated = true
+    if (res.duration) {
+      duration.value = res.duration
+      distance.value = res.distance
+      showResult.value = true
     }
-    const driving = new BMapGL.DrivingRoute(map, {
-      renderOptions: { map: map, autoViewport: true },
-      onSearchComplete: (results) => {
-        if (!statusOk(driving.getStatus())) {
-          statusHint.value = '路线规划失败，请稍后重试或切换为步行'
-          return
-        }
-        const plan = results.getPlan(0)
-        if (!plan) {
-          statusHint.value = '未找到可用路线，请检查地点顺序'
-          return
-        }
-        duration.value = plan.getDuration(true)
-        distance.value = plan.getDistance(true)
-        showResult.value = true
-      }
-    })
-    driving.search(first, last, { waypoints: mids })
-    statusHint.value = '已串联 ' + points.length + ' 个地点'
-      + (truncated ? '（途经点超过 10 个，仅取前 10 个）' : '')
-      + (failed.length ? '，未定位：' + failed.join('、') : '')
+    statusHint.value = '已自动串联 ' + res.points.length + ' 个地点'
+      + (res.truncated ? '（途经点超过 10 个，仅取前 10 个）' : '')
+      + (res.failed.length ? '，未定位：' + res.failed.join('、') : '')
+      + (travelMode.value === 'walking' ? '（步行逐段）' : '')
+  } catch (e) {
+    if (token === drawToken) statusHint.value = '路线生成失败，请稍后重试'
+  } finally {
+    if (token === drawToken) routeLoading.value = false
   }
-
-  routeLoading.value = false
 }
 
 function getPoint(address, callback) {
   const BMapGL = window.BMapGL
   const localSearch = new BMapGL.LocalSearch(map, {
     onSearchComplete: (results) => {
-      if (!statusOk(localSearch.getStatus())) {
+      if (!bmapStatusOk(localSearch.getStatus())) {
         loading.value = false
         ElMessage.error('地址解析失败，请检查输入')
         return
@@ -428,7 +320,7 @@ function searchRoute() {
         renderOptions: { map: map, autoViewport: true },
         onSearchComplete: (results) => {
           loading.value = false
-          if (!statusOk(transit.getStatus())) {
+          if (!bmapStatusOk(transit.getStatus())) {
             ElMessage.error('路线规划失败')
             return
           }
@@ -449,14 +341,9 @@ function searchRoute() {
 
 onMounted(async () => {
   await initMap()
-  // 从 AI 助手「在地图上查看路线」进来时带 auto=1，加载完计划直接画路线；
-  // 用 URL 参数而不是 localStorage 标记，避免中途离开后下次进「行程」页误触发
-  const autoDraw = route.query.auto === '1' && mode.value === 'plan'
   if (mode.value === 'free') nextTick(initAutocomplete)
+  // loadPlans → loadItinerary 完成后会自动画当天路线
   await loadPlans()
-  if (autoDraw && map && dayStops.value.length >= 2) {
-    drawPlanRoute()
-  }
 })
 </script>
 
@@ -549,7 +436,6 @@ onMounted(async () => {
 }
 .stop-item__name { flex: 1; color: #2c3e50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stop-item__time { color: #909399; }
-.plan-panel__btn { width: 100%; margin-top: 10px; }
 .plan-panel__hint { margin-top: 8px; font-size: 12px; color: #909399; line-height: 1.5; }
 .plan-panel__empty { padding: 16px 0; text-align: center; font-size: 13px; color: #909399; }
 .plan-panel__link {
