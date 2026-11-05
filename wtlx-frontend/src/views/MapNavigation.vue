@@ -1,46 +1,55 @@
 <template>
   <div class="page-container">
-    <HeaderBar title="地图导航" :show-back="true" />
+    <HeaderBar title="行程导航" :show-back="true" />
 
-    <div class="search-container">
-      <el-row>
-        <el-col :span="12">
-          <el-input
-            id="startAddrInput"
-            v-model="startAddr"
-            placeholder="输入起点（如：武汉）"
-            clearable
-          ></el-input>
-        </el-col>
-        <el-col :span="12">
-          <el-input
-            id="endAddrInput"
-            v-model="endAddr"
-            placeholder="输入终点（如：黄石）"
-            clearable
-          ></el-input>
-        </el-col>
-      </el-row>
+    <div class="route-panel">
+      <div class="route-panel__field">
+        <span class="route-panel__dot route-panel__dot--start"></span>
+        <el-input
+          id="startAddrInput"
+          v-model="startAddr"
+          placeholder="输入起点（如：武汉）"
+          clearable
+        ></el-input>
+      </div>
+      <div class="route-panel__field">
+        <span class="route-panel__dot route-panel__dot--end"></span>
+        <el-input
+          id="endAddrInput"
+          v-model="endAddr"
+          placeholder="输入终点（如：黄石）"
+          clearable
+        ></el-input>
+      </div>
       <el-button
         type="primary"
+        class="route-panel__btn"
+        :loading="loading"
         @click="searchRoute"
-        style="width: 100%; margin-top: 10px;"
-      >
-        开始导航
-      </el-button>
+      >开始导航</el-button>
     </div>
 
-    <!-- 固定的审图号显示 -->
-    <div class="map-approval-number">© 2025 Baidu - GS(2023)3206号 - 甲测资字1111342 - 京ICP证030173号 - Data © 百度智图</div>
+    <div class="map-shell">
+      <div id="allmap"></div>
+      <div v-if="!mapReady" class="map-placeholder">地图加载中…</div>
 
-    <div id="allmap"></div>
+      <div v-if="showResult" class="result-card">
+        <div class="result-card__item">
+          <span class="result-card__label">预计用时</span>
+          <span class="result-card__value">{{ duration }}</span>
+        </div>
+        <div class="result-card__divider"></div>
+        <div class="result-card__item">
+          <span class="result-card__label">全程距离</span>
+          <span class="result-card__value">{{ distance }}</span>
+        </div>
+        <button class="result-card__close" type="button" aria-label="关闭" @click="showResult = false">×</button>
+      </div>
 
-    <div class="result-box" v-if="showResult">
-      <p>行程时间：{{ duration }}</p>
-      <p>总距离：{{ distance }}</p>
+      <!-- 版权/审图号由百度地图 GL SDK 自带，不再叠加一条固定白条 -->
     </div>
 
-    <FootBar :active-btn="0" />
+    <FootBar :active-btn="2" />
   </div>
 </template>
 
@@ -58,8 +67,15 @@ const endAddr = ref('')
 const showResult = ref(false)
 const duration = ref('')
 const distance = ref('')
+const loading = ref(false)
+const mapReady = ref(false)
 let map = null
 let transit = null
+
+// 百度 GL 的成功状态码挂在 window 上，裸全局标识符在严格模式下不稳，统一兜底为 0
+function statusOk(status) {
+  return status === (window.BMAP_STATUS_SUCCESS ?? 0)
+}
 
 async function ensureBMapGL() {
   try {
@@ -75,15 +91,15 @@ async function initMap() {
   const BMapGL = await ensureBMapGL()
   if (!BMapGL) return
   map = new BMapGL.Map('allmap')
+  mapReady.value = true
   const geolocation = new BMapGL.Geolocation()
   geolocation.getCurrentPosition((r) => {
-    if (geolocation.getStatus() === BMAP_STATUS_SUCCESS) {
+    if (statusOk(geolocation.getStatus())) {
       map.centerAndZoom(r.point, 12)
-      const marker = new BMapGL.Marker(r.point)
-      map.addOverlay(marker)
+      map.addOverlay(new BMapGL.Marker(r.point))
     } else {
       map.centerAndZoom(new BMapGL.Point(116.404, 39.915), 12)
-      ElMessage.error('定位失败，请检查网络或位置权限')
+      ElMessage.warning('定位失败，已显示默认位置')
     }
   }, { enableHighAccuracy: true })
 }
@@ -94,12 +110,8 @@ async function initAutocomplete() {
   const startAddrInput = document.getElementById('startAddrInput')
   const endAddrInput = document.getElementById('endAddrInput')
 
-  const startAutocomplete = new BMapGL.Autocomplete({
-    input: 'startAddrInput'
-  })
-  const endAutocomplete = new BMapGL.Autocomplete({
-    input: 'endAddrInput'
-  })
+  const startAutocomplete = new BMapGL.Autocomplete({ input: 'startAddrInput' })
+  const endAutocomplete = new BMapGL.Autocomplete({ input: 'endAddrInput' })
 
   startAutocomplete.addEventListener('onconfirm', (e) => {
     startAddr.value = e.item.value
@@ -115,12 +127,18 @@ function getPoint(address, callback) {
   const BMapGL = window.BMapGL
   const localSearch = new BMapGL.LocalSearch(map, {
     onSearchComplete: (results) => {
-      if (localSearch.getStatus() === BMAP_STATUS_SUCCESS) {
-        const firstResult = results.getPoi(0)
-        callback(firstResult.point)
-      } else {
+      if (!statusOk(localSearch.getStatus())) {
+        loading.value = false
         ElMessage.error('地址解析失败，请检查输入')
+        return
       }
+      const firstResult = results.getPoi(0)
+      if (!firstResult || !firstResult.point) {
+        loading.value = false
+        ElMessage.error('未找到该地点，请换个关键词')
+        return
+      }
+      callback(firstResult.point)
     }
   })
   localSearch.search(address)
@@ -131,26 +149,31 @@ function searchRoute() {
     ElMessage.warning('请填写起点和终点')
     return
   }
-
-  showResult.value = false
-  if (transit) {
-    map.clearOverlays()
+  if (!map) {
+    ElMessage.warning('地图尚未加载完成，请稍候')
+    return
   }
+
+  loading.value = true
+  showResult.value = false
+  map.clearOverlays()
 
   const BMapGL = window.BMapGL
   getPoint(startAddr.value, (startPoint) => {
     getPoint(endAddr.value, (endPoint) => {
       transit = new BMapGL.DrivingRoute(map, {
-        renderOptions: {
-          map: map,
-          autoViewport: true
-        },
+        renderOptions: { map: map, autoViewport: true },
         onSearchComplete: (results) => {
-          if (transit.getStatus() !== BMAP_STATUS_SUCCESS) {
+          loading.value = false
+          if (!statusOk(transit.getStatus())) {
             ElMessage.error('路线规划失败')
             return
           }
           const plan = results.getPlan(0)
+          if (!plan) {
+            ElMessage.error('未找到可用路线')
+            return
+          }
           duration.value = plan.getDuration(true)
           distance.value = plan.getDistance(true)
           showResult.value = true
@@ -169,54 +192,104 @@ onMounted(() => {
 
 <style scoped>
 .page-container {
-  background: #f8f8f8;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  padding-bottom: 50px;
+  background: #f5f7fa;
 }
-#allmap {
-  width: 100%;
-  height: calc(100vh - 185px);
-  margin-top: 85px;
-  overflow: hidden;
-  position: relative;
-}
-.map-approval-number {
-  position: fixed;
-  left: 0;
-  right: 0;
-  font-size: 11px;
-  color: #333;
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 5px 15px;
-  text-align: center;
-  z-index: 1001;
-  border-bottom: 1px solid #eee;
-}
-.search-container {
-  position: fixed;
-  top: 75px;
-  left: 0;
-  right: 0;
-  padding: 15px;
-  background: white;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-}
-.search-container :deep(.el-input) {
-  flex: 1;
-  margin-right: 10px;
-}
-.search-container :deep(.el-button) {
+.page-container :deep(.header) {
+  position: static;
   flex: 0 0 auto;
 }
-.result-box {
-  position: fixed;
-  bottom: 60px;
-  left: 15px;
-  right: 15px;
-  background: white;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
+/* 百度地图会把部分控件挂到 body 下且层级较高，底部导航保持在其上 */
+.page-container :deep(.foot) {
+  z-index: 1200;
+}
+.route-panel {
+  flex: 0 0 auto;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  z-index: 2;
+}
+.route-panel__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.route-panel__dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.route-panel__dot--start { background: var(--wt-color-brand); }
+.route-panel__dot--end { background: var(--wt-color-danger); }
+.route-panel__btn { width: 100%; }
+.map-shell {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  /* 建独立层叠上下文，把百度地图内部的高 z-index 控件限制在本层内 */
+  z-index: 1;
+}
+#allmap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.map-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 13px;
+  background: #eef2f7;
+  pointer-events: none;
+}
+.result-card {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 3;
+}
+.result-card__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.result-card__label { font-size: 12px; color: #909399; }
+.result-card__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--wt-color-brand);
+}
+.result-card__divider { width: 1px; height: 32px; background: #ebeef5; }
+.result-card__close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: #c0c4cc;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
 }
 </style>

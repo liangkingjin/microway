@@ -1,8 +1,11 @@
 <template>
   <div class="page-container">
-    <!-- 顶部：品牌 + 内容 tab + 发布（去掉写死的假天气） -->
+    <!-- 顶部：天气 + 内容 tab + 发布 -->
     <div class="home-header">
-      <div class="hh-brand">微途</div>
+      <div class="weather-widget">
+        <el-icon><Sunny /></el-icon>
+        <span class="weather-text">26°C</span>
+      </div>
       <div class="hh-tabs">
         <div class="hh-tab" :class="{ active: activeTab === 'recommend' }" @click="switchTab('recommend')">推荐</div>
         <div class="hh-tab" :class="{ active: activeTab === 'follow' }" @click="switchTab('follow')">关注</div>
@@ -266,11 +269,20 @@ onBeforeUnmount(() => {
   top: 0;
   z-index: 1000;
 }
-.hh-brand {
-  font-size: 17px;
-  font-weight: 600;
-  color: #2c3e50;
-  letter-spacing: 1px;
+.weather-widget {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  color: #333;
+}
+.weather-widget i {
+  font-size: 20px;
+  color: #f9a825;
+  margin-right: 4px;
+}
+.weather-text {
+  font-size: 14px;
+  font-weight: 500;
 }
 .hh-tabs {
   flex: 1;
