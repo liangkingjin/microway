@@ -2,7 +2,7 @@
 
 > 分支：`refactor/trip-agent-rag-output`（自 `master`/`df81b2c` 拉出）
 > 状态：**设计阶段，待确认后进入编码**
-> 范围：后端 AI 链路（对话输出 / RAG / MQ 同步）+ 前端 `AI.vue` 会话页
+> 范围：后端 AI 链路（对话输出 / RAG / MQ 同步）+ 前端 `AiAssistant.vue` 会话页
 
 ---
 
@@ -18,7 +18,7 @@
 | 检索工具 | `topK=3`、`similarityThreshold=0.5`，返回拼接文本，无来源标识、无过滤 | `RagRetrievalTool` |
 | 向量库 | PGVector，`vector_store(id uuid, content, metadata json, embedding vector(1024))`，HNSW + COSINE_DISTANCE | `schema-postgresql.sql`、`application.yaml` |
 | 数据同步 | **无**。游记/攻略新增或修改后不会进入向量库 | — |
-| 前端渲染 | 单条消息 = `{content, isUser, time, cancelled}`，简易正则 markdown → 单一气泡，无思考过程、无卡片 | `AI.vue`（1067 行） |
+| 前端渲染 | 单条消息 = `{content, isUser, time, cancelled}`，简易正则 markdown → 单一气泡，无思考过程、无卡片 | `AiAssistant.vue`（1067 行） |
 
 ### 1.2 目标与差异（改动项）
 
@@ -35,7 +35,7 @@
 - **后端新增包**：`com.wtlx.rag`（切片/索引/检索）、`com.wtlx.mq`（消息与消费者）；`com.wtlx.entity.rag`、`com.wtlx.entity.dto.ai`
 - **后端修改**：`TripAgentServiceImpl`（分流）、`ReactAgentConfig`（提示词）、`ToolRegistration`（去 PDF）、`RabbitMQConfig`（新交换机/队列）、`BlogServiceImpl`（发消息）、`application.yaml`（RAG 参数）
 - **后端移除**：`PDFGenerationTool`（及 iText 依赖，视决策 D）
-- **前端修改**：`src/api/ai.js`、`src/views/AI.vue`，新增 `src/components/chat/*` 子组件
+- **前端修改**：`src/api/ai.js`、`src/views/AiAssistant.vue`，新增 `src/components/chat/*` 子组件
 - **数据**：PG `vector_db` 新增 1 张索引表；`vector_store` 复用（按 metadata 过滤，不新建表）
 - **不改动**：取消机制（GenerationRegistry/CancelService）、会话记忆（ConversationMemory*）、登录鉴权、游记/攻略自身 CRUD 与展示页
 
@@ -59,7 +59,7 @@
 ### 2.1 分层
 
 ```
-┌─ 前端 AI.vue ────────────────────────────────────────────┐
+┌─ 前端 AiAssistant.vue ────────────────────────────────────────────┐
 │  ChatMessage 组件：思考区（可折叠）/ 正文区 / 卡片网格    │
 └─────────────── SSE(thinking·delta·cards·done) ───────────┘
                             │
@@ -109,9 +109,9 @@
 | 新增 | `components/chat/BlogCardGrid.vue` | 游记卡片网格（空数组不渲染） |
 
 > 实现说明：原计划再抽一层 `ChatMessage.vue` 消息容器。编码时为把改动限制在局部，
-> 未引入该容器——AI.vue 的消息行结构保持原样，只在其内部挂载上面两个子组件。
+> 未引入该容器——AiAssistant.vue 的消息行结构保持原样，只在其内部挂载上面两个子组件。
 | 修改 | `api/ai.js` | 事件协议注释与类型约定 |
-| 修改 | `views/AI.vue` | 消息模型扩展 + SSE 解析 + 组装子组件 |
+| 修改 | `views/AiAssistant.vue` | 消息模型扩展 + SSE 解析 + 组装子组件 |
 
 ---
 

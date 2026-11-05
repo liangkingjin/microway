@@ -51,7 +51,7 @@ function login() {
       if (data) {
         auth.setToken(data)
       }
-      router.push('/info')
+      router.push('/profile')
     })
     .catch(err => ElMessage.error(err))
 }

@@ -2,7 +2,7 @@ import request from './request'
 
 /**
  * 游记接口（个人主页"游记"页签使用）
- * 原 Info.vue 内联的 axios 调用统一收敛到本文件
+ * 原 Profile.vue 内联的 axios 调用统一收敛到本文件
  */
 
 /** 我的游记列表（GET /blog/of/me） */

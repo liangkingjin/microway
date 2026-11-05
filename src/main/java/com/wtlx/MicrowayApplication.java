@@ -15,10 +15,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @Slf4j
 @EnableScheduling   //开启任务调度
 @EnableAsync        // AI 能力（异步记忆压缩等）
-public class WeiTuApplication {
+public class MicrowayApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(WeiTuApplication.class, args);
+        SpringApplication.run(MicrowayApplication.class, args);
     }
 
 }

@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.wtlx</groupId>
-    <artifactId>WeiTu</artifactId>
+    <artifactId>microway</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>wtlx</name>
+    <name>microway</name>
     <description>微途旅行业务服务（已收口 TripAgent AI 能力：Spring AI Alibaba ReactAgent）</description>
     <properties>
         <java.version>21</java.version>

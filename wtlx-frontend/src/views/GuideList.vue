@@ -82,7 +82,7 @@ function fetchProvinceGuides(province) {
 }
 
 function goToDetail(item) {
-  router.push(`/gonglue-detail?id=${item.id}`)
+  router.push(`/guide-detail?id=${item.id}`)
 }
 
 onMounted(() => {

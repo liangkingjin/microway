@@ -121,11 +121,11 @@ async function loadUser() {
 }
 
 function toEdit() {
-  router.push('/info-edit')
+  router.push('/profile-edit')
 }
 
 function toEditIntroduce() {
-  router.push('/info-edit?edit=introduce')
+  router.push('/profile-edit?edit=introduce')
 }
 
 async function handleLogout() {

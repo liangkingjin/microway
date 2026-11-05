@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概览
 
-微途旅行（WeiTu）—— 旅游平台，单仓库多工程：
+微途旅行（Microway）—— 旅游平台，单仓库多工程：
 
 | 目录 | 内容 |
 | --- | --- |
 | 仓库根 | Spring Boot 3.5.10 / Java 21 后端，端口 **9528**。业务 CRUD + 已收口的 TripAgent AI 能力 |
-| `wtlx-frontend/` | Vue 3 + Vite 6 SPA（36 个页面），开发端口 5173 |
+| `wtlx-frontend/` | Vue 3 + Vite 6 SPA（34 个业务页 + 404），开发端口 5173 |
 | `image-search-mcp-server/` | 只有一个**预构建 fat jar**（无源码、未纳入 git、`target/` 被忽略），供 MCP 图片检索使用。全新 clone 后该 jar 不存在，MCP 启动会失败 |
 
 代码注释、提交信息、设计文档全部为中文。新增代码请沿用中文注释；实体类保留 `@author 金小梁` 头注释风格。
@@ -29,7 +29,7 @@ $MVN test -Dtest=GenerationCancelServiceTest          # 单个测试类
 $MVN test -Dtest=GenerationCancelServiceTest#cancelShouldReturnCancelledWhenLocalHit   # 单个测试方法
 ```
 
-测试只有两个：`GenerationCancelServiceTest` 是纯 Mockito 单测（Redis 用 deep stub 兜住），**无需任何外部依赖，日常验证优先跑它**；`WeiTuApplicationTests` 是空壳 `@SpringBootTest`，需要完整基础设施才能起。
+测试只有两个：`GenerationCancelServiceTest` 是纯 Mockito 单测（Redis 用 deep stub 兜住），**无需任何外部依赖，日常验证优先跑它**；`MicrowayApplicationTests` 是空壳 `@SpringBootTest`，需要完整基础设施才能起。
 
 ### 前端（`wtlx-frontend/`）
 
@@ -53,6 +53,12 @@ com.wtlx.controller  com.wtlx.service        com.wtlx.service.impl              
 - `ServiceImpl` 一般不注入 mapper 字段，直接用继承来的 `query()` 链式调用或 `baseMapper`。
 - `src/main/resources/mapper/*.xml` 全是空的骨架文件（无任何 SQL 语句），也没有配 `mapper-locations`。自定义 SQL 用注解：`VideosMapper` 的 `@Update`、`ThumbsUpRecordMapper` 的 `@Select`。
 - 新增实体：`@Data` + `@EqualsAndHashCode(callSuper=false)` + `@Accessors(chain=true)` + `implements Serializable` + `@TableName` + `@TableId(type=IdType.AUTO)`。
+
+### 命名规范（2026-11-05 起）
+
+- **后端**：类名 UpperCamelCase 英文语义化；启动类为 `MicrowayApplication`（与 GitHub 仓库 `microway` 对齐，勿再引入 `WeiTu*` 拼音类名）。包名 `com.wtlx` 与 Maven groupId 属历史缩写，全局 276 个类，**不改动**。
+- `IXxxService` 是本项目既有分层约定（与 MyBatis-Plus `IService` 配套），保留；`Tb*` 前缀来自数据库 `tb_*` 表名，且前端 `/tb-hotel-order`、`/tb-blog-comments` 等接口依赖该前缀，**不要为"去前缀"改类名或 URL**——`BlogComments` 与 `TbBlogComments` 是两套实体，去掉前缀会直接撞名。
+- **前端**：视图/组件文件 PascalCase 多单词语义化，文件名 = 路由 `name`，path 为 kebab-case；禁止拼音缩写（`Gonglue*` / `Jingdian*`）与 `Page1` / `Login2` 式编号。完整新旧对照表见 `wtlx-frontend/README.md` 第八节。
 
 ### 统一响应
 
@@ -169,7 +175,7 @@ GET /ai/react/trip/chat?message=&threadId=&requestId=   (SSE, **要求登录**)
 Vue 3.5 + Vite 6 + Vue Router 4（**hash 模式**）+ Pinia + Element Plus，`<script setup>` 组合式 API。
 
 - **两套网络出口，不能混**：业务接口走 `src/api/request.js`（axios 实例，`baseURL: '/api'`，拦截器已校验 `success` 并处理 401，调用方取 `res.data`；上传用导出的 `uploadRequest`，超时 0）；AI 接口走 `src/api/ai.js`（**裸 `fetch` / `EventSource`**，因为 AI 返回裸对象、没有 `success` 包装，复用 axios 拦截器会误判为失败）。
-- 路由表已冻结在 `src/router/index.js`（视图文件名 = 路由 name，PascalCase，懒加载）；页面标题由 `afterEach` 设置。`MIGRATION_SPEC.md` 是原 Vue2 多页 → Vue3 的迁移规范，含 Element UI → Element Plus 的 API/图标对照表，改动老页面时可查。
+- 路由表冻结在 `src/router/index.js`（视图文件名 = 路由 `name`，PascalCase，path 为 kebab-case，懒加载）；页面标题由 `afterEach` 设置。文件末尾有一段**历史路径重定向兼容表**（拼音/编号时期的旧 URL → 新 URL，透传 query/hash），**勿删**，否则书签、AI 对话卡片与分享链接会 404。`MIGRATION_SPEC.md` 是原 Vue2 多页 → Vue3 的迁移规范，含 Element UI → Element Plus 的 API/图标对照表，改动老页面时可查。
 - **`router/index.js` 里有一段 `if (import.meta.env.DEV) return true` 的临时放行**：`npm run dev` 时完全跳过登录校验，生产构建不受影响。预览完需要自行删除。
 - AI 会话列表**没有后端接口**，存在 localStorage 的 `ai_sessions` 里（并兼容迁移旧的单会话 `ai_chat_id`）。
 - 样式令牌在 `src/styles/variables.css`（`--wt-*`）+ `src/styles/common.css`（`.wt-page` / `.wt-card` / `.wt-tabs` 等），组件内不要再写死颜色/间距。页面专属样式一律收进 SFC `<style scoped>`（SPA 防串扰），覆盖 Element Plus 内部类用 `:deep()`。

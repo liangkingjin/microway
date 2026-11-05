@@ -145,14 +145,14 @@ function queryTypes() {
     })
 }
 
-function toShopList(id, name) {  if (id === 4) router.push('/ai')
+function toShopList(id, name) {  if (id === 4) router.push('/ai-assistant')
   else if (id === 7) router.push('/group-tour')
   else if (id === 5) router.push('/local-tour')
-  else if (id === 6) router.push('/jingdian')
-  else if (id === 3) router.push('/zhaogonglue')
-  else if (id === 10) router.push('/watch')
-  else if (id === 8) router.push('/top')
-  else if (id === 2) router.push('/travel-list')
+  else if (id === 6) router.push('/check-in')
+  else if (id === 3) router.push('/guides')
+  else if (id === 10) router.push('/blogs')
+  else if (id === 8) router.push('/popular-destinations')
+  else if (id === 2) router.push('/travel-plan-list')
   else router.push('/shop-list?type=' + id + '&name=' + name)
 }
 
@@ -162,9 +162,9 @@ function toBlogDetail(b) {
 
 function toMore(type) {
   if (type === 'top') {
-    router.push('/top')
+    router.push('/popular-destinations')
   } else if (type === 'blog') {
-    router.push('/watch')
+    router.push('/blogs')
   }
 }
 

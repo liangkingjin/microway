@@ -25,12 +25,12 @@ const props = defineProps({
 
 const router = useRouter()
 const ROUTE_MAP = {
-  1: '/index',
-  2: '/map',
-  4: '/info'
+  1: '/home',
+  2: '/map-navigation',
+  4: '/profile'
 }
 function toPage(i) {
-  router.push(ROUTE_MAP[i] || '/index')
+  router.push(ROUTE_MAP[i] || '/home')
 }
 </script>
 

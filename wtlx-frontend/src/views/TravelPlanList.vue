@@ -232,7 +232,7 @@ function viewDetail(planId) {
   if (plan) {
     localStorage.setItem('currentPlan', JSON.stringify(plan))
   }
-  router.push('/list-detail?id=' + planId)
+  router.push('/travel-plan-detail?id=' + planId)
 }
 
 function showCreateDialog() {

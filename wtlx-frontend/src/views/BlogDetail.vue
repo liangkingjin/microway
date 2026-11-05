@@ -414,9 +414,9 @@ function init() {
 
 function toOtherInfo() {
   if (blog.value.userId === user.value.id) {
-    router.push('/info')
+    router.push('/profile')
   } else {
-    router.push('/other-info?id=' + blog.value.userId)
+    router.push('/user-profile?id=' + blog.value.userId)
   }
 }
 

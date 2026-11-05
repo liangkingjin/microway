@@ -92,7 +92,7 @@ function submitBlog() {
   request.post('/blog', data)
     .then(() => {
       ElMessage.success('发布成功')
-      router.push('/info')
+      router.push('/profile')
     })
     .catch(err => ElMessage.error(err))
     .finally(() => { submitting.value = false })

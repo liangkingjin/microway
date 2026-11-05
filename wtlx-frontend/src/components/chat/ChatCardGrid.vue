@@ -72,12 +72,12 @@ function coverStyle(card) {
 }
 
 function openPlan(card) {
-  router.push({ path: '/list-detail', query: { id: card.sourceId } })
+  router.push({ path: '/travel-plan-detail', query: { id: card.sourceId } })
 }
 
 function openDoc(card) {
   if (card.sourceType === 'GUIDE') {
-    router.push({ path: '/gonglue-detail', query: { id: card.sourceId } })
+    router.push({ path: '/guide-detail', query: { id: card.sourceId } })
     return
   }
   router.push({ path: '/blog-detail', query: { id: card.sourceId } })

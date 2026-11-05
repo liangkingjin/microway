@@ -110,7 +110,7 @@ function goBack() {
   if (window.history.length > 1) {
     router.back()
   } else {
-    router.push('/zhaogonglue')
+    router.push('/guides')
   }
 }
 

@@ -69,7 +69,7 @@ function login() {
         return
       }
       setTimeout(() => {
-        router.push('/index')
+        router.push('/home')
       }, 1000)
     })
     .catch(err => {

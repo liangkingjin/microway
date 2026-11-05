@@ -135,7 +135,7 @@ function handleClick(tab) {
 }
 
 function toOtherInfo(id) {
-  router.push('/other-info?id=' + id)
+  router.push('/user-profile?id=' + id)
 }
 </script>
 

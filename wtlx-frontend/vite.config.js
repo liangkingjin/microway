@@ -12,7 +12,7 @@ export default defineConfig({
         // 静态的 <img src="/imgs/xxx.png"> 改写成 `import _imports_0 from "/imgs/xxx.png?import"`；
         // 该请求会被 proxy 转给后端，拿到的是 Content-Type: image/png，
         // 浏览器按"模块脚本必须是 JS"做 MIME 校验直接拒绝 —— 于是**引用它的整个懒加载路由加载失败**，
-        // 表现为点底部导航「我的」没反应（Info.vue → ProfileBlogCard.vue 就是这么挂的），
+        // 表现为点底部导航「我的」没反应（Profile.vue → ProfileBlogCard.vue 就是这么挂的），
         // 同理还有 /other-info、/login、/travel-list。这里关掉绝对路径的改写，让它保持普通 <img> 请求。
         transformAssetUrls: { includeAbsolute: false }
       }

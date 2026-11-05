@@ -49,38 +49,37 @@ wtlx-frontend/
     │   ├── main.css            # 全局基础样式（原 css/main.css：foot 导航、el-tabs 等）
     │   └── header.css          # 公共头部样式（原 css/header.css）
     ├── utils/index.js          # getUrlParam（hash 路由 query 适配）/ formatPrice（原 common.js util）
-    └── views/                  # 36 个页面视图（每个 = 原 html 模板 + 脚本 + 页面样式 scoped）
-        ├── Index.vue / Login.vue / Login2.vue / AI.vue          # 种子页（先完成，冻结迁移模式）
-        ├── BlogDetail.vue / BlogEdit.vue / Info.vue / InfoEdit.vue / OtherInfo.vue
-        ├── Top.vue / TopDetail.vue / Watch.vue / VideoEdit.vue
-        ├── Jingdian.vue / Map.vue / ScenicDetail.vue / TravelPlan.vue
-        ├── LocalTour.vue / GroupTour.vue / ZhaoGonglue.vue / GonglueDetail.vue
-        ├── HotelRoomDetail.vue / HotelOrderDetail.vue / TicketOrderDetail.vue
-        ├── ShopDetail.vue / ShopList.vue / PublishSelect.vue
-        ├── Video.vue / TravelList.vue / ListDetail.vue
-        ├── Page1.vue / Page2.vue / Page3.vue / Page4.vue
-        ├── PrivacyPolicy.vue / UserAgreement.vue
+    └── views/                  # 34 个业务视图 + NotFound（PascalCase 语义化命名，见「八、命名规范」）
+        ├── HomeFeed.vue / PopularDestinations.vue / DestinationDetail.vue
+        ├── BlogFeed.vue / BlogDetail.vue / BlogEdit.vue
+        ├── GuideList.vue / GuideDetail.vue / CheckInBoard.vue
+        ├── CherryBlossomGuide.vue / HainanIslandGuide.vue / PhotoSpotsGuide.vue / SpringOutingGuide.vue
+        ├── TripItinerary.vue / TravelPlanList.vue / TravelPlanDetail.vue
+        ├── MapNavigation.vue / LocalTour.vue / GroupTour.vue / ScenicDetail.vue
+        ├── ShopList.vue / ShopDetail.vue / HotelRoomDetail.vue / HotelOrderDetail.vue / TicketOrderDetail.vue
+        ├── Login.vue / PasswordLogin.vue / Profile.vue / ProfileEdit.vue / UserProfile.vue / PublishSelect.vue
+        ├── AiAssistant.vue / PrivacyPolicy.vue / UserAgreement.vue
         └── NotFound.vue        # 404 兜底
 ```
 
 ---
 
-## 三、路由表（hash 模式，36 个有效页面）
+## 三、路由表（hash 模式，34 个业务页 + 404 兜底）
 
 | 原多页文件 | 路由 path | 视图文件 | 鉴权 |
 | --- | --- | --- | --- |
-| index.html | `/index`（`/` 重定向） | Index.vue | ✅ |
+| index.html | `/home`（`/` 重定向） | HomeFeed.vue | ✅ |
 | login.html | `/login` | Login.vue | ❌（登录页） |
-| login2.html | `/login2` | Login2.vue | ❌（密码登录） |
-| AI.html | `/ai` | AI.vue | ✅ |
-| jingdian.html | `/jingdian` | Jingdian.vue | ✅ |
-| map.html | `/map` | Map.vue | ✅ |
+| login2.html | `/password-login` | PasswordLogin.vue | ❌（密码登录） |
+| AI.html | `/ai-assistant` | AiAssistant.vue | ✅ |
+| jingdian.html | `/check-in` | CheckInBoard.vue | ✅ |
+| map.html | `/map-navigation` | MapNavigation.vue | ✅ |
 | scenic-detail.html | `/scenic-detail` | ScenicDetail.vue | ✅ |
-| travel-plan.html | `/travel-plan` | TravelPlan.vue | ✅ |
+| travel-plan.html | `/trip-itinerary` | TripItinerary.vue | ✅ |
 | 当地游.html | `/local-tour` | LocalTour.vue | ✅ |
 | 组团游.html | `/group-tour` | GroupTour.vue | ✅ |
-| zhaogonglue.html | `/zhaogonglue` | ZhaoGonglue.vue | ✅ |
-| gonglue-detail.html | `/gonglue-detail` | GonglueDetail.vue | ✅ |
+| zhaogonglue.html | `/guides` | GuideList.vue | ✅ |
+| gonglue-detail.html | `/guide-detail` | GuideDetail.vue | ✅ |
 | hotel-room-detail.html | `/hotel-room-detail` | HotelRoomDetail.vue | ✅ |
 | hotel-order-detail.html | `/hotel-order-detail` | HotelOrderDetail.vue | ✅ |
 | ticket-order-detail.html | `/ticket-order-detail` | TicketOrderDetail.vue | ✅ |
@@ -89,25 +88,24 @@ wtlx-frontend/
 | publish-select.html | `/publish-select` | PublishSelect.vue | ✅ |
 | blog-detail.html | `/blog-detail` | BlogDetail.vue | ✅ |
 | blog-edit.html | `/blog-edit` | BlogEdit.vue | ✅ |
-| info.html | `/info` | Info.vue | ✅ |
-| info-edit.html | `/info-edit` | InfoEdit.vue | ✅ |
-| other-info.html | `/other-info` | OtherInfo.vue | ✅ |
-| TOP.html | `/top` | Top.vue | ✅ |
-| TOP-detail.html | `/top-detail` | TopDetail.vue | ✅ |
-| watch.html | `/watch` | Watch.vue | ✅ |
-| video-edit.html | `/video-edit` | VideoEdit.vue | ✅ |
-| video.html | `/video` | Video.vue | ✅ |
-| 旅游清单.html | `/travel-list` | TravelList.vue | ✅ |
-| 清单详情.html | `/list-detail` | ListDetail.vue | ✅ |
-| page1.html | `/page1` | Page1.vue | ✅ |
-| page2.html | `/page2` | Page2.vue | ✅ |
-| page3.html | `/page3` | Page3.vue | ✅ |
-| page4.html | `/page4` | Page4.vue | ✅ |
+| info.html | `/profile` | Profile.vue | ✅ |
+| info-edit.html | `/profile-edit` | ProfileEdit.vue | ✅ |
+| other-info.html | `/user-profile` | UserProfile.vue | ✅ |
+| TOP.html | `/popular-destinations` | PopularDestinations.vue | ✅ |
+| TOP-detail.html | `/destination-detail` | DestinationDetail.vue | ✅ |
+| watch.html | `/blogs` | BlogFeed.vue | ✅ |
+| 旅游清单.html | `/travel-plan-list` | TravelPlanList.vue | ✅ |
+| 清单详情.html | `/travel-plan-detail` | TravelPlanDetail.vue | ✅ |
+| page1.html | `/cherry-blossom-guide` | CherryBlossomGuide.vue | ✅ |
+| page2.html | `/hainan-island-guide` | HainanIslandGuide.vue | ✅ |
+| page3.html | `/photo-spots-guide` | PhotoSpotsGuide.vue | ✅ |
+| page4.html | `/spring-outing-guide` | SpringOutingGuide.vue | ✅ |
 | privacy-policy.html | `/privacy-policy` | PrivacyPolicy.vue | ❌（协议页） |
 | user-agreement.html | `/user-agreement` | UserAgreement.vue | ❌（协议页） |
 | — | `/:pathMatch(.*)*` | NotFound.vue | 404 兜底 |
 
-> 原页面间互跳（如首页 → `/组团游.html`）已全部转为 `router.push('/group-tour')`，query 原样保留（如 `/top-detail?id=1`）。
+> 原页面间互跳（如首页 → `/组团游.html`）已全部转为 `router.push('/group-tour')`，query 原样保留（如 `/destination-detail?id=1`）。
+> 命名规范化前的旧路径（`/gonglue-detail`、`/zhaogonglue`、`/jingdian`、`/page1` 等）在 `src/router/index.js` 末尾保留一次性重定向，书签与分享链接不会失效。
 
 ---
 
@@ -157,7 +155,7 @@ server {
 }
 ```
 
-> 访问入口 `http://localhost:8080/#/index`。若后续想切换 history 路由模式，需在 nginx 加 `try_files $uri $uri/ /index.html;` 回退，并把 `createWebHashHistory` 改为 `createWebHistory`（本次未启用，保持零配置）。
+> 访问入口 `http://localhost:8080/#/home`。若后续想切换 history 路由模式，需在 nginx 加 `try_files $uri $uri/ /index.html;` 回退，并把 `createWebHashHistory` 改为 `createWebHistory`（本次未启用，保持零配置）。
 
 ## 七、已知行为差异（迁移汇总）
 
@@ -171,6 +169,50 @@ server {
    - 订单状态标签：原非法 `el-tag :type` 值映射为 Element Plus 合法类型（0 待支付→warning / 1 已支付→primary / 2 已确认→success / 3 已取消→info / 4 已完成→success）；
    - 清单详情：`el-time-picker` 的 Vue2 `step` 配置改为 EP `el-time-select`（15 分钟步进等价）；添加账单/行李后不再整页 reload，改为就地刷新并停留当前 tab（修复原页 reload 后 tab 硬编码跳回行程的缺陷）；
    - shop-detail：原模板未绑定的 seckill 死代码裁剪，`queryVoucher` 网络调用保留；
-   - TravelPlan：分享弹窗由脆弱 querySelector 反查改为类选择器绑定；百度地图 GL 脚本改为组件 onMounted 动态注入（两个页面各自的 ak 原值保留）；
+   - TripItinerary：分享弹窗由脆弱 querySelector 反查改为类选择器绑定；百度地图 GL 脚本改为组件 onMounted 动态注入（两个页面各自的 ak 原值保留）；
    - video-edit：原 `util.getUserId()` 在 common.js 中本不存在（恒 undefined），迁移后提交体不再带 userId（后端从 token 解析）；
    - page1~4：原 `.article-content` 无任何 CSS 定义，补最小可读样式（padding/行高/图片圆角），文案结构不变。
+
+---
+
+## 八、命名规范
+
+2026-11-05 起统一（与 GitHub 远端 `microway` 仓库的英文命名风格对齐），新增页面必须遵守：
+
+| 对象 | 规则 | 正例 | 反例 |
+| --- | --- | --- | --- |
+| 视图 / 组件文件 | PascalCase、多单词、语义化；**文件名 = 路由 `name`** | `GuideDetail.vue`、`ProfileEdit.vue` | `GonglueDetail.vue`、`Info.vue`、`Page1.vue` |
+| 路由 `path` | kebab-case 英文，与页面职责对应 | `/guide-detail`、`/user-profile` | `/gonglue-detail`、`/page1` |
+| JS / TS 模块、工具函数 | camelCase | `blogContent.js`、`useProfileBlogs.js` | `common2.js`、`ZhaoGonglue.js` |
+| 组件目录 | 按功能域分组（`chat/` `profile/` `common/`） | `components/chat/ChatCardGrid.vue` | 全部堆在 `components/` 根目录 |
+
+**禁止**：拼音或拼音缩写（`Gonglue`、`Jingdian`、`Zhaogonglue`）、无语义编号（`Page1`、`Login2`）、单单词视图名（`Top`、`Watch`、`Map`、`Info`、`AI`，既与 HTML/浏览器全局名冲突也无法表达职责）。
+
+### 本次重命名对照表
+
+| 旧文件 | 新文件 | 旧 path | 新 path |
+| --- | --- | --- | --- |
+| `Index.vue` | `HomeFeed.vue` | `/index` | `/home` |
+| `AI.vue` | `AiAssistant.vue` | `/ai` | `/ai-assistant` |
+| `Login2.vue` | `PasswordLogin.vue` | `/login2` | `/password-login` |
+| `Info.vue` | `Profile.vue` | `/info` | `/profile` |
+| `InfoEdit.vue` | `ProfileEdit.vue` | `/info-edit` | `/profile-edit` |
+| `OtherInfo.vue` | `UserProfile.vue` | `/other-info` | `/user-profile` |
+| `ZhaoGonglue.vue` | `GuideList.vue` | `/zhaogonglue` | `/guides` |
+| `GonglueDetail.vue` | `GuideDetail.vue` | `/gonglue-detail` | `/guide-detail` |
+| `Jingdian.vue` | `CheckInBoard.vue` | `/jingdian` | `/check-in` |
+| `Map.vue` | `MapNavigation.vue` | `/map` | `/map-navigation` |
+| `Page1.vue` | `CherryBlossomGuide.vue` | `/page1` | `/cherry-blossom-guide` |
+| `Page2.vue` | `HainanIslandGuide.vue` | `/page2` | `/hainan-island-guide` |
+| `Page3.vue` | `PhotoSpotsGuide.vue` | `/page3` | `/photo-spots-guide` |
+| `Page4.vue` | `SpringOutingGuide.vue` | `/page4` | `/spring-outing-guide` |
+| `Top.vue` | `PopularDestinations.vue` | `/top` | `/popular-destinations` |
+| `TopDetail.vue` | `DestinationDetail.vue` | `/top-detail` | `/destination-detail` |
+| `Watch.vue` | `BlogFeed.vue` | `/watch` | `/blogs` |
+| `TravelPlan.vue` | `TripItinerary.vue` | `/travel-plan` | `/trip-itinerary` |
+| `TravelList.vue` | `TravelPlanList.vue` | `/travel-list` | `/travel-plan-list` |
+| `ListDetail.vue` | `TravelPlanDetail.vue` | `/list-detail` | `/travel-plan-detail` |
+
+> `Jingdian.vue` 实际是「打卡发现」页面，`Watch.vue` 实际是「看游记」列表，`ListDetail.vue` 实际是「旅行计划详情」——旧名不仅用了拼音 / 单词，还与页面职责不符，故按职责重命名。
+>
+> 旧 path 保留在 `src/router/index.js` 末尾的 `Object.entries({...})` 兼容表中，重定向时 `query` / `hash` 原样透传（AI 对话卡片、分享链接里的 `?id=xx` 不会丢）。**不要再新增旧路径别名**，新页面直接用新命名。

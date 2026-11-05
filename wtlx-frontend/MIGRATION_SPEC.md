@@ -1,6 +1,8 @@
 # 微途旅行 wtlx-frontend 页面迁移规范（MIGRATION_SPEC）
 
-> 本文档是页面迁移的**唯一规范**：所有迁移子代理必须先完整阅读本文档 + 三个种子视图（`src/views/Index.vue`、`Login.vue`、`AI.vue`），再开始迁移。规范冲突时以本文档为准。
+> 本文档是页面迁移的**唯一规范**：所有迁移子代理必须先完整阅读本文档 + 三个种子视图（`src/views/HomeFeed.vue`、`Login.vue`、`AiAssistant.vue`），再开始迁移。规范冲突时以本文档为准。
+>
+> **2026-11-05 更新**：迁移完成后做过一次命名规范化（拼音 / 无语义编号 → 语义化英文），下方路由表的 path 与视图文件名已同步为新值；完整新旧对照见 `README.md` 第八节。旧路径在 `src/router/index.js` 末尾保留重定向。
 
 ## 0. 项目骨架（已就绪，禁止改动核心文件）
 
@@ -8,7 +10,7 @@
 - `package.json`、`vite.config.js`、`index.html`、`.gitignore`
 - `src/main.js`（Element Plus 全量引入 + 全部图标全局注册 + Pinia + Router）
 - `src/App.vue`
-- `src/router/index.js` —— **路由表已冻结**（全部 36 个有效页面已注册，懒加载；登录守卫、标题设置已内置；你只需把对应视图文件建到 `src/views/<Name>.vue`）
+- `src/router/index.js` —— **路由表已冻结**（34 个业务页 + 404 已注册，懒加载；登录守卫、标题设置已内置；你只需把对应视图文件建到 `src/views/<Name>.vue`）
 - `src/api/request.js`（业务后端 axios 实例，`/api` 前缀、2s 超时、authorization 头、success 校验、401 跳登录）、`src/api/user.js`、`src/api/ai.js`（AI 后端 9999 的 fetch/EventSource 封装）
 - `src/stores/auth.js`（Pinia 登录态）
 - `src/components/HeaderBar.vue`（标准返回头部）、`src/components/FootBar.vue`（底部导航：首页/行程/我的）
@@ -114,18 +116,18 @@ const router = useRouter()
 
 | 原文件 | 路由 path | 视图文件（src/views/） |
 | --- | --- | --- |
-| index.html | /index（已由种子页完成） | Index.vue ✅ |
+| index.html | /home（已由种子页完成） | HomeFeed.vue ✅ |
 | login.html | /login（已由种子页完成） | Login.vue ✅ |
-| login2.html | /login2（已由种子页完成） | Login2.vue ✅ |
-| AI.html | /ai（已由种子页完成） | AI.vue ✅ |
-| jingdian.html | /jingdian | Jingdian.vue |
-| map.html | /map | Map.vue |
+| login2.html | /password-login（已由种子页完成） | PasswordLogin.vue ✅ |
+| AI.html | /ai-assistant（已由种子页完成） | AiAssistant.vue ✅ |
+| jingdian.html | /check-in | CheckInBoard.vue |
+| map.html | /map-navigation | MapNavigation.vue |
 | scenic-detail.html | /scenic-detail | ScenicDetail.vue |
-| travel-plan.html | /travel-plan | TravelPlan.vue |
+| travel-plan.html | /trip-itinerary | TripItinerary.vue |
 | 当地游.html | /local-tour | LocalTour.vue |
 | 组团游.html | /group-tour | GroupTour.vue |
-| zhaogonglue.html | /zhaogonglue | ZhaoGonglue.vue |
-| gonglue-detail.html | /gonglue-detail | GonglueDetail.vue |
+| zhaogonglue.html | /guides | GuideList.vue |
+| gonglue-detail.html | /guide-detail | GuideDetail.vue |
 | hotel-room-detail.html | /hotel-room-detail | HotelRoomDetail.vue |
 | hotel-order-detail.html | /hotel-order-detail | HotelOrderDetail.vue |
 | ticket-order-detail.html | /ticket-order-detail | TicketOrderDetail.vue |
@@ -134,20 +136,18 @@ const router = useRouter()
 | publish-select.html | /publish-select | PublishSelect.vue |
 | blog-detail.html | /blog-detail | BlogDetail.vue |
 | blog-edit.html | /blog-edit | BlogEdit.vue |
-| info.html | /info | Info.vue |
-| info-edit.html | /info-edit | InfoEdit.vue |
-| other-info.html | /other-info | OtherInfo.vue |
-| TOP.html | /top | Top.vue |
-| TOP-detail.html | /top-detail | TopDetail.vue |
-| watch.html | /watch | Watch.vue |
-| video-edit.html | /video-edit | VideoEdit.vue |
-| video.html | /video | Video.vue |
-| 旅游清单.html | /travel-list | TravelList.vue |
-| 清单详情.html | /list-detail | ListDetail.vue |
-| page1.html | /page1 | Page1.vue |
-| page2.html | /page2 | Page2.vue |
-| page3.html | /page3 | Page3.vue |
-| page4.html | /page4 | Page4.vue |
+| info.html | /profile | Profile.vue |
+| info-edit.html | /profile-edit | ProfileEdit.vue |
+| other-info.html | /user-profile | UserProfile.vue |
+| TOP.html | /popular-destinations | PopularDestinations.vue |
+| TOP-detail.html | /destination-detail | DestinationDetail.vue |
+| watch.html | /blogs | BlogFeed.vue |
+| 旅游清单.html | /travel-plan-list | TravelPlanList.vue |
+| 清单详情.html | /travel-plan-detail | TravelPlanDetail.vue |
+| page1.html | /cherry-blossom-guide | CherryBlossomGuide.vue |
+| page2.html | /hainan-island-guide | HainanIslandGuide.vue |
+| page3.html | /photo-spots-guide | PhotoSpotsGuide.vue |
+| page4.html | /spring-outing-guide | SpringOutingGuide.vue |
 | privacy-policy.html | /privacy-policy | PrivacyPolicy.vue |
 | user-agreement.html | /user-agreement | UserAgreement.vue |
 
@@ -160,7 +160,7 @@ const router = useRouter()
 3. **请求超时 2s、成功判定 `res.success`**：接口路径/参数名/字段名一律保持原样，不要"优化"或改名。
 4. **`formatPrice` / `getUrlParam` 复用 `src/utils/index.js`**，勿重复实现。
 5. 原页面中 `this.$message.error`（忘了加括号的 bug 式写法）→ 按错误处理意图处理（提示或 console），不要原样照抄。
-6. 模板中的 `v-for` 必须配 `:key`；动态 ref（Vue2 `:ref="'video'+i"`）→ Vue3 函数式 ref（参考 Index.vue 的 `videoRef(index)`）。
+6. 模板中的 `v-for` 必须配 `:key`；动态 ref（Vue2 `:ref="'video'+i"`）→ Vue3 函数式 ref（参考 HomeFeed.vue 的 `videoRef(index)`）。
 7. 中文文件名页面间的互跳（如 当地游→组团游）必须换成英文路由路径。
 8. 不要创建任何新的全局组件/全局样式/路由；不要改 router/index.js。
 
@@ -184,7 +184,7 @@ const router = useRouter()
 
 ### 5.3 交付报告
 完成后报告：
-1. 每个页面的视图文件**绝对路径**（如 `D:\JavaProject\IdeaProject\TripAgent\wtlx-frontend\src\views\Jingdian.vue`）
+1. 每个页面的视图文件**绝对路径**（如 `D:\JavaProject\IdeaProject\TripAgent\wtlx-frontend\src\views\CheckInBoard.vue`）
 2. 自检清单结果（逐页）
 3. 与原页面**有意的行为差异**（如有，如实列出，例如某接口在联调时不可用而做了容错）
 

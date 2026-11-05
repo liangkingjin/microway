@@ -3,7 +3,7 @@ import { ORDER_TYPE } from '../constants'
 
 /**
  * 订单接口（门票 / 酒店）
- * 原 Info.vue 内联的 axios 调用统一收敛到本文件
+ * 原 Profile.vue 内联的 axios 调用统一收敛到本文件
  */
 
 /** 我的门票订单（GET /orders/of/user） */

@@ -280,7 +280,7 @@ function loadScenicDetail(id) {
     })
 }
 
-// 百度地图 GL（与 Map.vue 不同的 ak，按原页保留）；必须用 &callback 方式异步加载，
+// 百度地图 GL（与 MapNavigation.vue 不同的 ak，按原页保留）；必须用 &callback 方式异步加载，
 // 否则百度返回的引导脚本里的 document.write 会被浏览器忽略，BMapGL 永远挂载不上
 const BMAP_AK = 'MZZeQYAyRjGoHdKCNdD9R2IzHFDRbsZ3'
 

@@ -32,7 +32,7 @@ function padNumber(num) {
 }
 
 function goToDetail(item) {
-  router.push('/top-detail?id=' + item.id)
+  router.push('/destination-detail?id=' + item.id)
 }
 
 function loadRecommendations() {

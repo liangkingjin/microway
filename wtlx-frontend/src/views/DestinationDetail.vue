@@ -323,7 +323,7 @@ function generatePlan() {
     content: ''
   }
   localStorage.setItem('travelPlan', JSON.stringify(planData))
-  router.push('/travel-plan')
+  router.push('/trip-itinerary')
 }
 
 function toggleSpotDetail(index) {
