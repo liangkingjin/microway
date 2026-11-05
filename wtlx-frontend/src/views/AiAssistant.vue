@@ -68,6 +68,9 @@
                     <div v-if="msg.content" class="bubble-content" v-html="renderMarkdown(msg.content)"></div>
                     <ChatCardGrid :cards="msg.cards || []" />
                   </div>
+                  <div v-if="hasPlanCard(msg) && !msg.streaming" class="map-entry">
+                    <button type="button" class="map-entry__btn" @click="goTripMap(msg)">在地图上查看路线</button>
+                  </div>
                   <span class="timestamp">
                     {{ formatTime(msg.time) }}
                     <em v-if="msg.cancelled" class="cancelled-tag">已停止</em>
@@ -248,6 +251,25 @@ function parseJson(text) {
 
 function goBack() {
   router.back()
+}
+
+// sourceType=PLAN 的卡片由后端计划工具在落库成功时推送，done 与会话历史里同样携带。
+// 它同时充当两件事的信号：本轮确实生成了计划、地图页该加载哪一份计划。
+// 因此不额外维护 hasPlan 状态，卡片被删除（removePlanCard 广播空集合）时入口会自动消失。
+function planCardOf(msg) {
+  return (msg.cards || []).find(c => c && c.sourceType === 'PLAN' && c.sourceId != null) || null
+}
+
+function hasPlanCard(msg) {
+  return !!planCardOf(msg)
+}
+
+function goTripMap(msg) {
+  const card = planCardOf(msg)
+  const query = { auto: '1' }
+  // 带准确 planId，避免地图页用「取最新一条」的兜底猜错计划
+  if (card) query.planId = card.sourceId
+  router.push({ path: '/map-navigation', query })
 }
 
 function formatTime(timestamp) {
@@ -1203,6 +1225,25 @@ function toggleSidebar() {
   color: #b42318;
   background: #fef3f2;
   border-radius: 4px;
+}
+/* 生成计划后的一键直达入口：与卡片同属回答气泡外，避免 v-html 覆盖子节点 */
+.map-entry {
+  margin-top: 8px;
+}
+.map-entry__btn {
+  padding: 8px 14px;
+  border: 1px solid rgba(26, 95, 122, 0.35);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a5f7a;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.map-entry__btn:hover {
+  background: #f0f9fb;
+  border-color: #1a5f7a;
+  box-shadow: 0 2px 8px rgba(26, 95, 122, 0.12);
 }
 .input-hint {
   text-align: center;
