@@ -287,7 +287,7 @@ onBeforeUnmount(() => {
   transition: color 0.2s;
 }
 .hh-tab.active {
-  color: #0f6e56;
+  color: var(--wt-color-brand);
   font-weight: 600;
 }
 .hh-tab.active::after {
@@ -298,7 +298,7 @@ onBeforeUnmount(() => {
   width: 20px;
   height: 2px;
   border-radius: 1px;
-  background: #1d9e75;
+  background: var(--wt-color-brand);
   transform: translateX(-50%);
 }
 .hh-publish {
@@ -307,7 +307,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   padding: 6px 12px;
   border-radius: 20px;
-  background: #1d9e75;
+  background: var(--wt-color-brand);
   color: #fff;
   font-size: 13px;
   cursor: pointer;
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
   padding: 3px 10px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.92);
-  color: #0f6e56;
+  color: var(--wt-color-brand-dark);
   font-size: 12px;
   font-weight: 600;
 }
@@ -379,8 +379,8 @@ onBeforeUnmount(() => {
   height: 46px;
   margin: 0 auto 6px;
   border-radius: 50%;
-  background: #eaf7f2;
-  color: #0f6e56;
+  background: rgba(64, 158, 255, 0.12);
+  color: var(--wt-color-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -415,7 +415,7 @@ onBeforeUnmount(() => {
 .section-icon {
   width: 4px;
   height: 16px;
-  background: #1d9e75;
+  background: var(--wt-color-brand);
   border-radius: 2px;
 }
 .section-more {

@@ -42,18 +42,18 @@ function toPage(i) {
 
 <style scoped>
 /* 基础布局由全局 main.css 的 .foot/.foot-box/.foot-view/.foot-text 提供 */
-.foot-center { color: #0f6e56; }
+.foot-center { color: var(--wt-color-brand); }
 .foot-add {
   width: 40px;
   height: 40px;
   margin-top: -18px;
   border-radius: 50%;
-  background: #1d9e75;
+  background: #39a5f8;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  box-shadow: 0 3px 10px rgba(29, 158, 117, 0.3);
+  box-shadow: 0 2px 8px rgba(57, 165, 248, 0.4);
 }
 </style>
